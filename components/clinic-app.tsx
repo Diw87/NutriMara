@@ -4,7 +4,7 @@ import { type ReactNode, FormEvent, useCallback, useEffect, useMemo, useState } 
 import { serverClient, type ClinicClient } from "@/lib/clinic-client";
 import {
   Activity, ArrowRight, CalendarDays, Check, ChevronRight, ClipboardList,
-  Clock3, HeartPulse, LayoutDashboard, ListPlus, Plus, Search, Stethoscope,
+  Clock3, FileText, HeartPulse, LayoutDashboard, ListPlus, Plus, Search, Stethoscope,
   TrendingDown, Users, Utensils, X,
 } from "lucide-react";
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
@@ -14,6 +14,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Textarea } from "@/components/ui/textarea";
 import { Toaster } from "@/components/ui/sonner";
 import PhotoAssessment, { type PhotoAssessmentRecord } from "@/components/photo-assessment";
+import ClinicalRecordPanel, { type ClinicalRecord } from "@/components/clinical-record-panel";
 import { toast } from "sonner";
 
 type Patient = { id: number; name: string; phone: string; birthDate: string; goal: string; notes: string; createdAt: string };
@@ -21,12 +22,12 @@ type Appointment = { id: number; patientId: number; startsAt: string; kind: stri
 type Measurement = { id: number; patientId: number; measuredOn: string; weightKg: number | null; waistCm: number | null; notes: string };
 type Meal = { time: string; label: string; foods: string };
 type MealPlan = { id: number; patientId: number; title: string; instructions: string; mealsJson: string; updatedAt: string };
-type Workspace = { patients: Patient[]; appointments: Appointment[]; measurements: Measurement[]; plans: MealPlan[]; photoAssessments: PhotoAssessmentRecord[] };
-type Section = "overview" | "patients" | "agenda" | "plans" | "evolution" | "preview";
+type Workspace = { patients: Patient[]; appointments: Appointment[]; measurements: Measurement[]; plans: MealPlan[]; photoAssessments: PhotoAssessmentRecord[]; clinicalRecords?: ClinicalRecord[] };
+type Section = "overview" | "patients" | "agenda" | "plans" | "evolution" | "records" | "preview";
 type SiteTool = { name: string; title: string; description: string; inputSchema: object; annotations: { readOnlyHint: boolean; untrustedContentHint: boolean }; execute: (input: unknown) => Promise<unknown> };
 type SiteModelContext = { registerTool: (tool: SiteTool, options: { signal: AbortSignal }) => void | Promise<void> };
 
-const emptyWorkspace: Workspace = { patients: [], appointments: [], measurements: [], plans: [], photoAssessments: [] };
+const emptyWorkspace: Workspace = { patients: [], appointments: [], measurements: [], plans: [], photoAssessments: [], clinicalRecords: [] };
 const emptyPatient = { name: "", phone: "", birthDate: "", goal: "", notes: "" };
 const firstMeals: Meal[] = [
   { time: "07:00", label: "Café da manhã", foods: "" },
@@ -39,6 +40,7 @@ const nav: { value: Section; label: string; icon: typeof Users }[] = [
   { value: "agenda", label: "Agenda", icon: CalendarDays },
   { value: "plans", label: "Planos", icon: Utensils },
   { value: "evolution", label: "Evolução", icon: Activity },
+  { value: "records", label: "Fichas", icon: FileText },
   { value: "preview", label: "Visão do paciente", icon: HeartPulse },
 ];
 
@@ -136,11 +138,13 @@ export default function ClinicApp({ client = serverClient, tools }: { client?: C
   }, [client]);
   useEffect(() => { void load(); }, [load]);
 
-  const workspace = data ?? emptyWorkspace;
+  const workspace = data ? { ...emptyWorkspace, ...data, clinicalRecords: data.clinicalRecords ?? [] } : emptyWorkspace;
+  const clinicalEnabled = data?.clinicalRecords !== undefined;
   const selected = workspace.patients.find((patient) => patient.id === selectedId) ?? null;
   const selectedPlan = workspace.plans.find((plan) => plan.patientId === selectedId) ?? null;
   const selectedMeasurements = useMemo(() => workspace.measurements.filter((item) => item.patientId === selectedId), [workspace.measurements, selectedId]);
   const selectedPhotos = useMemo(() => workspace.photoAssessments.filter((item) => item.patientId === selectedId), [workspace.photoAssessments, selectedId]);
+  const selectedClinicalRecord = workspace.clinicalRecords?.find((item) => item.patientId === selectedId) ?? null;
   const upcoming = workspace.appointments.filter((appointment) => appointment.status === "Agendada" && appointment.startsAt.slice(0, 10) >= today()).sort((a, b) => a.startsAt.localeCompare(b.startsAt));
   const appointmentsSorted = workspace.appointments.slice().sort((a, b) => b.startsAt.localeCompare(a.startsAt));
   const visiblePatients = workspace.patients.filter((patient) => `${patient.name} ${patient.goal}`.toLocaleLowerCase("pt-BR").includes(search.toLocaleLowerCase("pt-BR")));
@@ -280,7 +284,7 @@ export default function ClinicApp({ client = serverClient, tools }: { client?: C
 
     <main className="page-wrap">
       <Tabs value={section} onValueChange={(value) => setSection(value as Section)} className="workspace-tabs">
-        <div className="nav-row"><TabsList aria-label="Seções do consultório" className="main-nav">{nav.map(({ value, label, icon: Icon }) => <TabsTrigger key={value} value={value} className="nav-trigger"><Icon size={17} /><span>{label}</span></TabsTrigger>)}</TabsList></div>
+        <div className="nav-row"><TabsList aria-label="Seções do consultório" className="main-nav">{nav.filter(({ value }) => value !== "records" || clinicalEnabled).map(({ value, label, icon: Icon }) => <TabsTrigger key={value} value={value} className="nav-trigger"><Icon size={17} /><span>{label}</span></TabsTrigger>)}</TabsList></div>
 
         {error && !data ? <div className="load-error" role="alert"><h2>Não foi possível abrir o consultório</h2><p>{error}</p><button className="button button-primary" onClick={() => { setLoading(true); void load(); }}>Tentar novamente</button></div> : null}
 
@@ -305,7 +309,7 @@ export default function ClinicApp({ client = serverClient, tools }: { client?: C
         <TabsContent value="patients" className="tab-panel"><div className="page-heading"><div><span className="eyebrow">ACOMPANHAMENTO</span><h1>Pacientes</h1><p>Informações de quem você acompanha, sempre à mão.</p></div><button className="button button-primary" onClick={openNewPatient}><Plus size={18} /> Novo paciente</button></div>
           {workspace.patients.length ? <div className="patients-layout"><section className="surface patient-list"><div className="list-header"><h2>Todos os pacientes <span>{workspace.patients.length}</span></h2><label className="search-field"><Search size={17} /><Input value={search} onChange={(event) => setSearch(event.target.value)} placeholder="Buscar paciente" aria-label="Buscar paciente" /></label></div>
             <div className="patient-rows">{visiblePatients.map((patient) => <button key={patient.id} className={`patient-row ${selectedId === patient.id ? "selected" : ""}`} onClick={() => setSelectedId(patient.id)}><span className="patient-avatar">{initials(patient.name)}</span><span className="patient-row-name"><strong>{patient.name}</strong><small>{patient.goal || "Objetivo ainda não informado"}</small></span><ChevronRight size={18} /></button>)}{!visiblePatients.length && <div className="inline-empty">Nenhum paciente encontrado para esta busca.</div>}</div></section>
-            <section className="surface patient-detail">{selected ? <><div className="detail-top"><span className="detail-avatar">{initials(selected.name)}</span><div><span className="eyebrow">PRONTUÁRIO</span><h2>{selected.name}</h2><small>Cadastrado em {formatDay(selected.createdAt)}</small></div></div><div className="detail-data"><div><span>Objetivo</span><strong>{selected.goal || "Não informado"}</strong></div><div><span>Telefone</span><strong>{selected.phone || "Não informado"}</strong></div><div><span>Nascimento</span><strong>{selected.birthDate ? formatDay(selected.birthDate) : "Não informado"}</strong></div><div><span>Último peso</span><strong>{number(workspace.measurements.find((item) => item.patientId === selected.id && item.weightKg !== null)?.weightKg ?? null, "kg")}</strong></div></div>{selected.notes && <div className="note-box"><span>Observações</span><p>{selected.notes}</p></div>}<div className="detail-actions"><button className="button button-primary" onClick={() => selectPatient(selected.id, "plans")}><Utensils size={17} /> Plano alimentar</button><button className="button button-secondary" onClick={() => selectPatient(selected.id, "evolution")}>Fotos e medidas</button><button className="button button-secondary" onClick={() => openEditPatient(selected)}>Editar cadastro</button></div></> : <EmptyState title="Selecione um paciente" description="Escolha um cadastro para visualizar os detalhes." />}</section></div> : <div className="surface"><EmptyState icon={Users} title="Seu primeiro paciente começa aqui" description="Cadastre nome e objetivo. Depois você pode adicionar consultas, medidas e o plano alimentar." action="Cadastrar paciente" onAction={openNewPatient} /></div>}
+            <section className="surface patient-detail">{selected ? <><div className="detail-top"><span className="detail-avatar">{initials(selected.name)}</span><div><span className="eyebrow">PRONTUÁRIO</span><h2>{selected.name}</h2><small>Cadastrado em {formatDay(selected.createdAt)}</small></div></div><div className="detail-data"><div><span>Objetivo</span><strong>{selected.goal || "Não informado"}</strong></div><div><span>Telefone</span><strong>{selected.phone || "Não informado"}</strong></div><div><span>Nascimento</span><strong>{selected.birthDate ? formatDay(selected.birthDate) : "Não informado"}</strong></div><div><span>Último peso</span><strong>{number(workspace.measurements.find((item) => item.patientId === selected.id && item.weightKg !== null)?.weightKg ?? null, "kg")}</strong></div></div>{selected.notes && <div className="note-box"><span>Observações</span><p>{selected.notes}</p></div>}<div className="detail-actions"><button className="button button-primary" onClick={() => selectPatient(selected.id, "plans")}><Utensils size={17} /> Plano alimentar</button>{clinicalEnabled && <button className="button button-secondary" onClick={() => selectPatient(selected.id, "records")}><FileText size={17} /> Ficha clínica</button>}<button className="button button-secondary" onClick={() => selectPatient(selected.id, "evolution")}>Fotos e medidas</button><button className="button button-secondary" onClick={() => openEditPatient(selected)}>Editar cadastro</button></div></> : <EmptyState title="Selecione um paciente" description="Escolha um cadastro para visualizar os detalhes." />}</section></div> : <div className="surface"><EmptyState icon={Users} title="Seu primeiro paciente começa aqui" description="Cadastre nome e objetivo. Depois você pode adicionar consultas, medidas e o plano alimentar." action="Cadastrar paciente" onAction={openNewPatient} /></div>}
         </TabsContent>
 
         <TabsContent value="agenda" className="tab-panel"><div className="page-heading"><div><span className="eyebrow">ATENDIMENTO</span><h1>Agenda</h1><p>Consulte horários e acompanhe o status de cada atendimento.</p></div><button className="button button-primary" onClick={workspace.patients.length ? openNewAppointment : openNewPatient}><Plus size={18} /> {workspace.patients.length ? "Nova consulta" : "Cadastrar paciente"}</button></div>
@@ -319,6 +323,10 @@ export default function ClinicApp({ client = serverClient, tools }: { client?: C
 
         <TabsContent value="evolution" className="tab-panel"><div className="page-heading"><div><span className="eyebrow">RESULTADOS</span><h1>Evolução</h1><p>Registre medidas e veja a trajetória de cada paciente.</p></div>{selected && <button className="button button-primary" onClick={() => { setMeasurementForm({ measuredOn: today(), weightKg: "", waistCm: "", notes: "" }); setMeasurementOpen(true); }}><Plus size={18} /> Registrar medidas</button>}</div>
           {workspace.patients.length ? <><div className="toolbar-surface"><PatientPicker patients={workspace.patients} value={selectedId} onChange={setSelectedId} /></div><div className="evolution-grid"><section className="surface chart-surface"><div className="section-heading"><div><span className="eyebrow">HISTÓRICO</span><h2>Evolução do peso</h2></div><div className="chart-current"><small>Último registro</small><strong>{number(currentWeight?.weightKg ?? null, "kg")}</strong></div></div><WeightChart measurements={selectedMeasurements} /></section><section className="surface measure-surface"><div className="section-heading"><div><span className="eyebrow">MEDIDAS</span><h2>Registros</h2></div><span className="meal-count">{selectedMeasurements.length}</span></div>{selectedMeasurements.length ? <div className="measure-list">{selectedMeasurements.map((item) => <div className="measure-row" key={item.id}><div><strong>{formatDay(item.measuredOn)}</strong>{item.notes && <small>{item.notes}</small>}</div><div><strong>{number(item.weightKg, "kg")}</strong><small>Cintura: {number(item.waistCm, "cm")}</small></div></div>)}</div> : <div className="mini-empty"><p>Nenhuma medida registrada para {selected?.name}.</p><button className="text-button" onClick={() => setMeasurementOpen(true)}>Registrar medidas <ArrowRight size={16} /></button></div>}</section></div>{selected && <PhotoAssessment client={client} patientId={selected.id} patientName={selected.name} entries={selectedPhotos} onSaved={load} today={today()} formatDay={formatDay} />}</> : <div className="surface"><EmptyState icon={Activity} title="Acompanhe a evolução" description="Cadastre um paciente e comece a registrar peso e medidas." action="Cadastrar paciente" onAction={openNewPatient} /></div>}
+        </TabsContent>
+
+        <TabsContent value="records" className="tab-panel"><div className="page-heading"><div><span className="eyebrow">DOCUMENTAÇÃO CLÍNICA</span><h1>Ficha do paciente</h1><p>Preencha, salve no prontuário e imprima ou gere um PDF pelo navegador.</p></div>{selected && <span className="privacy-note"><Stethoscope size={17} /> Ficha profissional</span>}</div>
+          {clinicalEnabled && selected ? <><div className="toolbar-surface"><PatientPicker patients={workspace.patients} value={selectedId} onChange={setSelectedId} />{selectedClinicalRecord && <span className="last-saved">Ficha atualizada em {formatDay(selectedClinicalRecord.updatedAt)}</span>}</div><ClinicalRecordPanel key={selected.id} client={client} patient={selected} record={selectedClinicalRecord} onSaved={load} /></> : <div className="surface"><EmptyState icon={FileText} title="Primeiro, cadastre um paciente" description="A ficha clínica ficará ligada ao prontuário selecionado." action="Cadastrar paciente" onAction={openNewPatient} /></div>}
         </TabsContent>
 
         <TabsContent value="preview" className="tab-panel"><div className="page-heading"><div><span className="eyebrow">ACOMPANHAMENTO</span><h1>Visão do paciente</h1><p>Confira como as orientações ficam organizadas para consulta.</p></div><span className="preview-badge">Prévia dentro do consultório</span></div>

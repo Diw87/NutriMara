@@ -12,6 +12,35 @@ export const statusSchema = z.enum(["Agendada", "Concluída", "Cancelada"]);
 export const measurementSchema = z.object({ patientId: idSchema, measuredOn: dateSchema, weightKg: z.number().positive().max(600).nullable(), waistCm: z.number().positive().max(400).nullable(), notes: short(1000).default("") });
 export const mealsSchema = z.array(z.object({ time: short(12), label: short(80).min(1), foods: short(700).min(1) })).min(1).max(12);
 export const planSchema = z.object({ patientId: idSchema, title: short(120).min(2), instructions: short(2000).default(""), meals: mealsSchema });
+const optionalMeasure = (max: number) => z.number().positive().max(max).nullable();
+export const clinicalRecordInputSchema = z.object({
+  patientId: idSchema,
+  consultationDate: dateSchema,
+  mainComplaint: short(2000).default(""),
+  clinicalHistory: short(5000).default(""),
+  diagnoses: short(3000).default(""),
+  medications: short(3000).default(""),
+  allergies: short(2000).default(""),
+  surgeries: short(2000).default(""),
+  familyHistory: short(2000).default(""),
+  bowelHabits: short(1200).default(""),
+  sleep: short(1200).default(""),
+  physicalActivity: short(1800).default(""),
+  waterIntake: short(1200).default(""),
+  foodRoutine: short(5000).default(""),
+  restrictions: short(2000).default(""),
+  weightKg: optionalMeasure(600),
+  heightCm: optionalMeasure(250),
+  waistCm: optionalMeasure(400),
+  hipCm: optionalMeasure(400),
+  bodyFatPct: z.number().positive().max(100).nullable(),
+  bloodPressure: short(80).default(""),
+  goals: short(3000).default(""),
+  conduct: short(5000).default(""),
+  returnDate: z.union([dateSchema, z.literal("")]).default(""),
+  professionalNotes: short(5000).default(""),
+});
+export const clinicalRecordSchema = clinicalRecordInputSchema.extend({ id: idSchema, updatedAt: z.string().datetime() });
 const point = z.object({ x: z.number().min(0).max(1), y: z.number().min(0).max(1) });
 const marked = z.object({ width: z.number().int().min(200).max(5000), height: z.number().int().min(400).max(5000), head: point, feet: point, left: point, right: point });
 export const marksSchema = z.object({ front: marked, side: marked });
@@ -23,6 +52,7 @@ export const workspaceSchema = z.object({
   measurements: z.array(measurementSchema.extend({ id: idSchema }).refine(v => v.weightKg !== null || v.waistCm !== null, "Informe o peso ou a cintura.")).max(200000),
   plans: z.array(z.object({ id: idSchema, patientId: idSchema, title: short(120).min(2), instructions: short(2000), mealsJson: z.string().max(20000).refine(v => { try { return mealsSchema.safeParse(JSON.parse(v)).success; } catch { return false; } }), updatedAt: z.string().datetime() })).max(50000),
   photoAssessments: z.array(photoRecord).max(50000),
+  clinicalRecords: z.array(clinicalRecordSchema).max(50000).default([]),
 });
 export const backupSchema = z.object({ format: z.literal("nutrimara-backup"), version: z.literal(1), id: z.string().uuid(), exportedAt: z.string().datetime(), workspace: workspaceSchema,
   photos: z.array(z.object({ id: idSchema, front: z.string().min(4).max(5600000), side: z.string().min(4).max(5600000) })).max(50000),

@@ -31,12 +31,15 @@ test("cadastros persistem em outra conexão e mantêm consultas, medidas e plano
   await mutate(store, { action: "addMeasurement", patientId: created.id, measuredOn: "2026-09-23", weightKg: 80, waistCm: 90, notes: "" });
   await mutate(store, { action: "savePlan", patientId: created.id, title: "Plano inicial", instructions: "", meals: [{ time: "12:00", label: "Almoço", foods: "Arroz e feijão" }] });
   await mutate(store, { action: "savePlan", patientId: created.id, title: "Plano atualizado", instructions: "", meals: [{ time: "12:00", label: "Almoço", foods: "Arroz, feijão e legumes" }] });
+  await mutate(store, { action: "saveClinicalRecord", patientId: created.id, consultationDate: "2026-09-23", weightKg: 80, heightCm: 180, waistCm: 90, hipCm: null, bodyFatPct: null, mainComplaint: "Organizar a rotina", conduct: "Acompanhar em 30 dias" });
   const saved = await workspace(createLocalStore(name, indexedDB));
   assert.equal(saved.patients[0].name, "Paciente de teste");
   assert.equal(saved.appointments[0].status, "Concluída");
   assert.equal(saved.measurements[0].weightKg, 80);
   assert.equal(saved.plans.length, 1);
   assert.equal(saved.plans[0].title, "Plano atualizado");
+  assert.equal(saved.clinicalRecords.length, 1);
+  assert.equal(saved.clinicalRecords[0].mainComplaint, "Organizar a rotina");
 });
 
 test("rejeita vínculos inexistentes e dados fora dos limites sem gravar", async () => {
@@ -68,6 +71,7 @@ test("backup recupera fotos e vínculos sem apagar cadastros locais nem duplicar
   const source = fresh();
   const { id } = await mutate(source, patient);
   await mutate(source, { action: "addMeasurement", patientId: id, measuredOn: "2026-09-23", weightKg: 81, waistCm: null, notes: "" });
+  await mutate(source, { action: "saveClinicalRecord", patientId: id, consultationDate: "2026-09-23", weightKg: 81, heightCm: 180, waistCm: null, hipCm: null, bodyFatPct: null, mainComplaint: "Backup clínico", conduct: "Retorno" });
   await source.request("/api/photos", { method: "POST", body: photos(id) });
   const backup = JSON.parse(JSON.stringify(await source.exportBackup()));
   const target = fresh();
@@ -78,6 +82,8 @@ test("backup recupera fotos e vínculos sem apagar cadastros locais nem duplicar
   const importedId = restored.patients.find(p => p.name === "Paciente de teste").id;
   assert.notEqual(importedId, 1);
   assert.equal(restored.measurements[0].patientId, importedId);
+  assert.equal(restored.clinicalRecords[0].patientId, importedId);
+  assert.equal(restored.clinicalRecords[0].mainComplaint, "Backup clínico");
   assert.equal(restored.photoAssessments[0].patientId, importedId);
   const url = await target.photoUrl(restored.photoAssessments[0].id, "side");
   assert.equal((await (await fetch(url)).arrayBuffer()).byteLength, 12);

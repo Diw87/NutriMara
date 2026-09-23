@@ -1,9 +1,9 @@
 import { z } from "zod";
 import { estimateWaistFromPhotos } from "../lib/photo-estimate.ts";
 import { validatePhotoBytes } from "../lib/photo-upload.ts";
-import { appointmentSchema, backupSchema, idSchema, marksSchema, measurementSchema, patientSchema, photoInputSchema, planSchema, statusSchema, type Backup, type PhotoRecord, type Workspace } from "./schemas.ts";
+import { appointmentSchema, backupSchema, clinicalRecordInputSchema, idSchema, marksSchema, measurementSchema, patientSchema, photoInputSchema, planSchema, statusSchema, type Backup, type PhotoRecord, type Workspace } from "./schemas.ts";
 
-const stores = ["patients", "appointments", "measurements", "plans", "photoAssessments", "imports"];
+const stores = ["patients", "appointments", "measurements", "plans", "photoAssessments", "clinicalRecords", "imports"];
 type SavedPhoto = PhotoRecord & { front: Blob; side: Blob };
 class LocalError extends Error { status: number; constructor(message: string, status = 400) { super(message); this.status = status; } }
 function read<T>(request: IDBRequest<T>): Promise<T> { return new Promise((resolve, reject) => { request.onsuccess = () => resolve(request.result); request.onerror = () => reject(request.error); }); }
@@ -32,9 +32,9 @@ export function createLocalStore(name = "nutrimara-local-v1", factory: IDBFactor
   function open() {
     if (!factory) return Promise.reject(new LocalError("Este navegador não permite salvar os registros. Abra o aplicativo em uma janela normal do Chrome, Edge ou Safari."));
     if (!connection) connection = new Promise<IDBDatabase>((resolve, reject) => {
-      const request = factory.open(name, 1);
+      const request = factory.open(name, 2);
       request.onupgradeneeded = () => {
-        for (const store of stores) request.result.createObjectStore(store, { keyPath: "id", autoIncrement: store !== "imports" });
+        for (const store of stores) if (!request.result.objectStoreNames.contains(store)) request.result.createObjectStore(store, { keyPath: "id", autoIncrement: store !== "imports" });
       };
       request.onsuccess = () => { const db = request.result; db.onversionchange = () => { db.close(); connection = undefined; }; resolve(db); };
       request.onerror = () => { connection = undefined; reject(request.error); };
@@ -53,8 +53,8 @@ export function createLocalStore(name = "nutrimara-local-v1", factory: IDBFactor
     });
   }
   async function snapshot(tx: IDBTransaction) {
-    const [patients, appointments, measurements, plans, photos] = await Promise.all(stores.slice(0, 5).map(store => read(tx.objectStore(store).getAll())));
-    return { workspace: sortWorkspace({ patients, appointments, measurements, plans, photoAssessments: (photos as SavedPhoto[]).map(metadata) }), photos: photos as SavedPhoto[] };
+    const [patients, appointments, measurements, plans, photos, clinicalRecords] = await Promise.all(stores.slice(0, 6).map(store => read(tx.objectStore(store).getAll())));
+    return { workspace: sortWorkspace({ patients, appointments, measurements, plans, photoAssessments: (photos as SavedPhoto[]).map(metadata), clinicalRecords }), photos: photos as SavedPhoto[] };
   }
   async function ownedPatient(tx: IDBTransaction, id: number) {
     if (!await read(tx.objectStore("patients").get(id))) throw new LocalError("Paciente não encontrado.", 404);
@@ -92,6 +92,12 @@ export function createLocalStore(name = "nutrimara-local-v1", factory: IDBFactor
         const { meals, ...input } = planSchema.parse(body); await ownedPatient(tx, input.patientId);
         const store = tx.objectStore("plans"); const existing = (await read(store.getAll())).find(item => item.patientId === input.patientId);
         await read(store.put({ ...input, ...(existing ? { id: existing.id } : {}), mealsJson: JSON.stringify(meals), updatedAt: new Date().toISOString() })); return { ok: true };
+      }
+      if (body.action === "saveClinicalRecord") {
+        const input = clinicalRecordInputSchema.parse(body); await ownedPatient(tx, input.patientId);
+        const store = tx.objectStore("clinicalRecords"); const existing = (await read(store.getAll())).find(item => item.patientId === input.patientId);
+        const id = Number(await read(store.put({ ...input, ...(existing ? { id: existing.id } : {}), updatedAt: new Date().toISOString() })));
+        return { id, ok: true };
       }
       throw new LocalError("Ação desconhecida.");
     });
@@ -170,7 +176,7 @@ export function createLocalStore(name = "nutrimara-local-v1", factory: IDBFactor
       if (await read(tx.objectStore("imports").get(backup.id))) throw new LocalError("Esta cópia de segurança já foi importada.");
       const remapped = new Map<number, number>();
       for (const { id, ...patient } of backup.workspace.patients) remapped.set(id, Number(await read(tx.objectStore("patients").add(patient))));
-      for (const key of ["appointments", "measurements", "plans", "photoAssessments"] as const) {
+      for (const key of ["appointments", "measurements", "plans", "photoAssessments", "clinicalRecords"] as const) {
         for (const { id, patientId, ...record } of backup.workspace[key]) await read(tx.objectStore(key).add({ ...record, patientId: remapped.get(patientId), ...(key === "photoAssessments" ? blobs.get(id) : {}) }));
       }
       await read(tx.objectStore("imports").add({ id: backup.id, importedAt: new Date().toISOString() }));

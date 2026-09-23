@@ -1,6 +1,6 @@
 # NutriMara
 
-Aplicativo da nutricionista **Marakesia Nascimento — CRN 11-6356**, com pacientes, agenda, planos alimentares, medidas e acompanhamento por fotos.
+Aplicativo da nutricionista **Marakesia Nascimento — CRN 11-6356**, com pacientes, agenda, fichas clínicas, planos alimentares, medidas e acompanhamento por fotos.
 
 ## Abrir e instalar
 
@@ -22,6 +22,7 @@ O GitHub Free oferece Pages em repositórios públicos. Um repositório privado 
 ## Onde ficam os registros
 
 - A edição GitHub Pages guarda pacientes e fotos **neste navegador/dispositivo**, usando IndexedDB. Ela não usa a conta GitHub como banco de dados e não exige login no ChatGPT.
+- A aba **Fichas** guarda uma ficha clínica por paciente, com anamnese, histórico, rotina alimentar, antropometria, IMC calculado, metas e conduta. O botão **Imprimir / PDF** abre a impressão do navegador para imprimir ou escolher **Salvar como PDF**.
 - Não há sincronização automática entre computadores, celulares ou navegadores. Para transferir dados, use **Exportar cópia** e **Importar cópia**.
 - A cópia inclui cadastros, consultas, medidas, planos e fotos. Importar acrescenta os registros e preserva os existentes; repetir o mesmo arquivo é bloqueado. Cópias exportadas em momentos diferentes podem conter pacientes em comum.
 - Guarde o backup com cuidado: ele contém os dados clínicos e fotografias. Exporte antes de limpar os dados do navegador ou trocar de aparelho. Não trabalhe em navegação anônima se precisa manter os registros.
