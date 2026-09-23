@@ -1,7 +1,7 @@
 "use client";
 
-import { FormEvent, useCallback, useEffect, useMemo, useState } from "react";
-import Image from "next/image";
+import { type ReactNode, FormEvent, useCallback, useEffect, useMemo, useState } from "react";
+import { serverClient, type ClinicClient } from "@/lib/clinic-client";
 import {
   Activity, ArrowRight, CalendarDays, Check, ChevronRight, ClipboardList,
   Clock3, HeartPulse, LayoutDashboard, ListPlus, Plus, Search, Stethoscope,
@@ -103,7 +103,7 @@ function WeightChart({ measurements }: { measurements: Measurement[] }) {
   </svg></div>;
 }
 
-export default function ClinicApp() {
+export default function ClinicApp({ client = serverClient, tools }: { client?: ClinicClient; tools?: ReactNode } = {}) {
   const [data, setData] = useState<Workspace | null>(null);
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(true);
@@ -124,7 +124,7 @@ export default function ClinicApp() {
 
   const load = useCallback(async () => {
     try {
-      const response = await fetch("/api/workspace", { cache: "no-store" });
+      const response = await client.request("/api/workspace", { cache: "no-store" });
       const payload = await response.json() as Workspace & { error?: string };
       if (!response.ok) throw new Error(payload.error ?? "Não foi possível carregar os registros.");
       setData(payload);
@@ -133,7 +133,7 @@ export default function ClinicApp() {
     } catch (cause) {
       setError(cause instanceof Error ? cause.message : "Não foi possível carregar os registros.");
     } finally { setLoading(false); }
-  }, []);
+  }, [client]);
   useEffect(() => { void load(); }, [load]);
 
   const workspace = data ?? emptyWorkspace;
@@ -161,7 +161,7 @@ export default function ClinicApp() {
   async function mutate(payload: Record<string, unknown>, confirmation: string): Promise<{ id?: number; ok?: boolean } | null> {
     setBusy(true);
     try {
-      const response = await fetch("/api/workspace", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(payload) });
+      const response = await client.request("/api/workspace", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(payload) });
       const result = await response.json() as { error?: string; id?: number; ok?: boolean };
       if (!response.ok) throw new Error(result.error ?? "Não foi possível salvar.");
       await load();
@@ -235,7 +235,7 @@ export default function ClinicApp() {
       inputSchema: { type: "object", properties: {}, additionalProperties: false },
       annotations: { readOnlyHint: true, untrustedContentHint: false },
       async execute() {
-        const response = await fetch("/api/workspace", { cache: "no-store" });
+        const response = await client.request("/api/workspace", { cache: "no-store" });
         const result = await response.json() as Workspace & { error?: string };
         if (!response.ok) throw new Error(result.error ?? "Não foi possível listar os pacientes.");
         return { patients: result.patients.map(({ id, name, goal }) => ({ id, name, goal })) };
@@ -256,7 +256,7 @@ export default function ClinicApp() {
         const phone = typeof values.phone === "string" ? values.phone.trim() : "";
         const goal = typeof values.goal === "string" ? values.goal.trim() : "";
         if (name.length < 2 || name.length > 120 || phone.length > 40 || goal.length > 240 || Object.keys(values).some((key) => !["name", "phone", "goal"].includes(key))) throw new Error("Confira os dados do paciente.");
-        const response = await fetch("/api/workspace", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ action: "createPatient", name, phone, goal, birthDate: "", notes: "" }) });
+        const response = await client.request("/api/workspace", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ action: "createPatient", name, phone, goal, birthDate: "", notes: "" }) });
         const result = await response.json() as { id?: number; error?: string };
         if (!response.ok || !result.id) throw new Error(result.error ?? "Não foi possível cadastrar o paciente.");
         await load();
@@ -266,16 +266,17 @@ export default function ClinicApp() {
       },
     });
     return () => lifecycle.abort();
-  }, [load]);
+  }, [load, client]);
 
   return <div className="app-shell">
     <Toaster richColors position="top-right" />
     <header className="site-header">
       <div className="header-inner">
-        <div className="brand"><Image className="brand-logo" src="/marakesia-logo.png" alt="Logo da nutricionista Marakesia Nascimento, CRN 11-6356" width={112} height={112} priority /><div><strong>Nutri<span>Mara</span></strong><small>Consultório digital</small></div></div>
+        <div className="brand"><img className="brand-logo" src={client.assetUrl("marakesia-logo.png")} alt="Logo da nutricionista Marakesia Nascimento, CRN 11-6356" width={112} height={112} fetchPriority="high" /><div><strong>Nutri<span>Mara</span></strong><small>Consultório digital</small></div></div>
         <div className="header-user"><span className="professional-label">Marakesia Nascimento <span>· CRN 11-6356</span></span><span className="professional-avatar">MN</span></div>
       </div>
     </header>
+    {tools}
 
     <main className="page-wrap">
       <Tabs value={section} onValueChange={(value) => setSection(value as Section)} className="workspace-tabs">
@@ -317,7 +318,7 @@ export default function ClinicApp() {
         </TabsContent>
 
         <TabsContent value="evolution" className="tab-panel"><div className="page-heading"><div><span className="eyebrow">RESULTADOS</span><h1>Evolução</h1><p>Registre medidas e veja a trajetória de cada paciente.</p></div>{selected && <button className="button button-primary" onClick={() => { setMeasurementForm({ measuredOn: today(), weightKg: "", waistCm: "", notes: "" }); setMeasurementOpen(true); }}><Plus size={18} /> Registrar medidas</button>}</div>
-          {workspace.patients.length ? <><div className="toolbar-surface"><PatientPicker patients={workspace.patients} value={selectedId} onChange={setSelectedId} /></div><div className="evolution-grid"><section className="surface chart-surface"><div className="section-heading"><div><span className="eyebrow">HISTÓRICO</span><h2>Evolução do peso</h2></div><div className="chart-current"><small>Último registro</small><strong>{number(currentWeight?.weightKg ?? null, "kg")}</strong></div></div><WeightChart measurements={selectedMeasurements} /></section><section className="surface measure-surface"><div className="section-heading"><div><span className="eyebrow">MEDIDAS</span><h2>Registros</h2></div><span className="meal-count">{selectedMeasurements.length}</span></div>{selectedMeasurements.length ? <div className="measure-list">{selectedMeasurements.map((item) => <div className="measure-row" key={item.id}><div><strong>{formatDay(item.measuredOn)}</strong>{item.notes && <small>{item.notes}</small>}</div><div><strong>{number(item.weightKg, "kg")}</strong><small>Cintura: {number(item.waistCm, "cm")}</small></div></div>)}</div> : <div className="mini-empty"><p>Nenhuma medida registrada para {selected?.name}.</p><button className="text-button" onClick={() => setMeasurementOpen(true)}>Registrar medidas <ArrowRight size={16} /></button></div>}</section></div>{selected && <PhotoAssessment patientId={selected.id} patientName={selected.name} entries={selectedPhotos} onSaved={load} today={today()} formatDay={formatDay} />}</> : <div className="surface"><EmptyState icon={Activity} title="Acompanhe a evolução" description="Cadastre um paciente e comece a registrar peso e medidas." action="Cadastrar paciente" onAction={openNewPatient} /></div>}
+          {workspace.patients.length ? <><div className="toolbar-surface"><PatientPicker patients={workspace.patients} value={selectedId} onChange={setSelectedId} /></div><div className="evolution-grid"><section className="surface chart-surface"><div className="section-heading"><div><span className="eyebrow">HISTÓRICO</span><h2>Evolução do peso</h2></div><div className="chart-current"><small>Último registro</small><strong>{number(currentWeight?.weightKg ?? null, "kg")}</strong></div></div><WeightChart measurements={selectedMeasurements} /></section><section className="surface measure-surface"><div className="section-heading"><div><span className="eyebrow">MEDIDAS</span><h2>Registros</h2></div><span className="meal-count">{selectedMeasurements.length}</span></div>{selectedMeasurements.length ? <div className="measure-list">{selectedMeasurements.map((item) => <div className="measure-row" key={item.id}><div><strong>{formatDay(item.measuredOn)}</strong>{item.notes && <small>{item.notes}</small>}</div><div><strong>{number(item.weightKg, "kg")}</strong><small>Cintura: {number(item.waistCm, "cm")}</small></div></div>)}</div> : <div className="mini-empty"><p>Nenhuma medida registrada para {selected?.name}.</p><button className="text-button" onClick={() => setMeasurementOpen(true)}>Registrar medidas <ArrowRight size={16} /></button></div>}</section></div>{selected && <PhotoAssessment client={client} patientId={selected.id} patientName={selected.name} entries={selectedPhotos} onSaved={load} today={today()} formatDay={formatDay} />}</> : <div className="surface"><EmptyState icon={Activity} title="Acompanhe a evolução" description="Cadastre um paciente e comece a registrar peso e medidas." action="Cadastrar paciente" onAction={openNewPatient} /></div>}
         </TabsContent>
 
         <TabsContent value="preview" className="tab-panel"><div className="page-heading"><div><span className="eyebrow">ACOMPANHAMENTO</span><h1>Visão do paciente</h1><p>Confira como as orientações ficam organizadas para consulta.</p></div><span className="preview-badge">Prévia dentro do consultório</span></div>

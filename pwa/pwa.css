@@ -1,0 +1,12 @@
+.pwa-bar { max-width: 1240px; margin: 22px auto 0; padding: 16px 20px; display: flex; align-items: center; justify-content: space-between; gap: 16px; border: 1px solid var(--border); border-radius: 16px; background: white; }
+.pwa-storage { display: flex; align-items: center; gap: 12px; color: var(--primary); }
+.pwa-storage strong { display: block; font-size: .94rem; color: var(--foreground); }
+.pwa-storage span { display: flex; align-items: center; gap: 5px; margin-top: 3px; font-size: .875rem; color: var(--muted-foreground); }
+.pwa-actions { display: flex; flex-wrap: wrap; gap: 8px; }
+.pwa-actions .button { min-height: 42px; font-size: .875rem; padding: 9px 12px; }
+.pwa-data-note { max-width: 1240px; margin: 9px auto 0; padding: 0 2px; font-size: .875rem; line-height: 1.5; color: #526c70; }
+.pwa-file-input { display: none; }
+.install-help { display: grid; gap: 14px; line-height: 1.6; }
+@media (max-width: 1300px) { .pwa-bar { margin-left: 24px; margin-right: 24px; } .pwa-data-note { margin-left: 26px; margin-right: 26px; } }
+@media (max-width: 760px) { .pwa-bar { margin: 14px 16px 0; padding: 16px; align-items: flex-start; flex-direction: column; } .pwa-actions { width: 100%; } .pwa-actions .button { flex: 1 1 auto; justify-content: center; } .pwa-data-note { margin: 8px 18px 0; } }
+@media print { .pwa-bar, .pwa-data-note { display: none; } }

@@ -7,6 +7,7 @@ import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, 
 import { Input } from "@/components/ui/input";
 import { NativeSelect, NativeSelectOption } from "@/components/ui/native-select";
 import { toast } from "sonner";
+import { serverClient, type ClinicClient } from "@/lib/clinic-client";
 import { estimateWaistFromPhotos, type MarkedPhoto, type Point } from "@/lib/photo-estimate";
 
 export type PhotoAssessmentRecord = {
@@ -109,8 +110,25 @@ function PhotoMarker({ label, draft, active, setActive, setPoint, onPhotoReady }
   </div>;
 }
 
-export default function PhotoAssessment({ patientId, patientName, entries, onSaved, today, formatDay }: {
-  patientId: number; patientName: string; entries: PhotoAssessmentRecord[];
+function StoredPhoto({ client, id, view, alt }: { client: ClinicClient; id: number; view: "front" | "side"; alt: string }) {
+  const [source, setSource] = useState("");
+  const [failed, setFailed] = useState(false);
+  useEffect(() => {
+    let active = true; let url = "";
+    setSource(""); setFailed(false);
+    void client.photoUrl(id, view).then(value => {
+      url = value;
+      if (active) setSource(value);
+      else if (value.startsWith("blob:")) URL.revokeObjectURL(value);
+    }).catch(() => { if (active) setFailed(true); });
+    return () => { active = false; if (url.startsWith("blob:")) URL.revokeObjectURL(url); };
+  }, [client, id, view]);
+  if (failed) return <p role="status">Não foi possível abrir esta foto.</p>;
+  return source ? <img src={source} alt={alt} loading="lazy" onError={() => setFailed(true)} /> : <p role="status">Abrindo foto...</p>;
+}
+
+export default function PhotoAssessment({ client = serverClient, patientId, patientName, entries, onSaved, today, formatDay }: {
+  client?: ClinicClient; patientId: number; patientName: string; entries: PhotoAssessmentRecord[];
   onSaved: () => Promise<void>; today: string; formatDay: (day: string) => string;
 }) {
   const [open, setOpen] = useState(false);
@@ -158,7 +176,7 @@ export default function PhotoAssessment({ patientId, patientName, entries, onSav
     body.set("marks", JSON.stringify({ front: marked(front), side: marked(side) }));
     setSaving(true);
     try {
-      const response = await fetch("/api/photos", { method: "POST", body });
+      const response = await client.request("/api/photos", { method: "POST", body });
       const payload = await response.json() as { error?: string };
       if (!response.ok) throw new Error(payload.error || "Não foi possível salvar a avaliação.");
       await onSaved();
@@ -170,7 +188,7 @@ export default function PhotoAssessment({ patientId, patientName, entries, onSav
   async function remove(id: number) {
     setDeletingId(id);
     try {
-      const response = await fetch(`/api/photos?id=${id}`, { method: "DELETE" });
+      const response = await client.request(`/api/photos?id=${id}`, { method: "DELETE" });
       const payload = await response.json() as { error?: string };
       if (!response.ok) throw new Error(payload.error || "Não foi possível remover.");
       await onSaved();
@@ -185,7 +203,7 @@ export default function PhotoAssessment({ patientId, patientName, entries, onSav
     {entries.length ? <>
       <div className="photo-compare-toolbar"><div className="field"><label htmlFor="photo-old">Comparar data anterior</label><NativeSelect id="photo-old" value={olderId ?? ""} onChange={(event) => setOlderId(Number(event.target.value))}><NativeSelectOption value="">Selecione uma data</NativeSelectOption>{entries.map((entry) => <NativeSelectOption key={entry.id} value={entry.id}>{formatDay(entry.measuredOn)}</NativeSelectOption>)}</NativeSelect></div><div className="field"><label htmlFor="photo-new">Com data recente</label><NativeSelect id="photo-new" value={newerId ?? ""} onChange={(event) => setNewerId(Number(event.target.value))}><NativeSelectOption value="">Selecione uma data</NativeSelectOption>{entries.map((entry) => <NativeSelectOption key={entry.id} value={entry.id}>{formatDay(entry.measuredOn)}</NativeSelectOption>)}</NativeSelect></div><div className="field"><label htmlFor="photo-angle">Ângulo</label><NativeSelect id="photo-angle" value={angle} onChange={(event) => setAngle(event.target.value as "front" | "side")}><NativeSelectOption value="front">Frente</NativeSelectOption><NativeSelectOption value="side">Lado</NativeSelectOption></NativeSelect></div></div>
       <div className="photo-compare-grid">{[{ entry: older, label: "Antes" }, { entry: newer, label: "Depois" }].map(({ entry, label }) => <div className="photo-compare-card" key={label}>{entry ? <><div className="photo-compare-heading"><strong>{label} · {formatDay(entry.measuredOn)}</strong><AlertDialog><AlertDialogTrigger asChild><button className="photo-remove" aria-label={`Remover avaliação de ${formatDay(entry.measuredOn)}`} title="Remover avaliação" disabled={deletingId !== null}><Trash2 size={17} /></button></AlertDialogTrigger><AlertDialogContent><AlertDialogHeader><AlertDialogTitle>Remover esta avaliação?</AlertDialogTitle><AlertDialogDescription>As duas fotos e a estimativa dessa data serão apagadas do prontuário de {patientName}.</AlertDialogDescription></AlertDialogHeader><AlertDialogFooter><AlertDialogCancel>Cancelar</AlertDialogCancel><AlertDialogAction onClick={() => void remove(entry.id)}>Remover fotos</AlertDialogAction></AlertDialogFooter></AlertDialogContent></AlertDialog></div>
-        {/* eslint-disable-next-line @next/next/no-img-element */}<img src={`/api/photos?id=${entry.id}&view=${angle}`} alt={`Avaliação ${angle === "front" ? "frontal" : "lateral"} de ${patientName} em ${formatDay(entry.measuredOn)}`} loading="lazy" />
+        {/* eslint-disable-next-line @next/next/no-img-element */}<StoredPhoto client={client} id={entry.id} view={angle} alt={`Avaliação ${angle === "front" ? "frontal" : "lateral"} de ${patientName} em ${formatDay(entry.measuredOn)}`} />
         <div className="photo-compare-stats"><span>Estimativa da cintura <strong>≈ {entry.waistEstimateCm} cm</strong></span><span>Altura informada: {entry.heightCm} cm</span></div></> : <div className="photo-empty-slot">{label === "Antes" ? "Selecione outra data para comparar." : "Selecione uma avaliação."}</div>}</div>)}</div>
       <p className="photo-caution">Estimativa geométrica a partir das marcações em duas fotos. Roupa, postura e distância da câmera alteram o resultado. Confirme a circunferência da cintura com fita métrica antes de usar em decisões clínicas. A foto não mede hidratação nem percentual de gordura.</p>
     </> : <div className="photo-empty-state"><Camera size={24} /><div><strong>Sem avaliações por fotos</strong><span>Adicione a primeira para acompanhar a evolução visual de {patientName}.</span></div></div>}

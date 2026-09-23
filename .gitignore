@@ -45,5 +45,7 @@ next-env.d.ts
 /outputs/
 /work/
 
-# Generated TypeScript state
-/tsconfig.tsbuildinfo
+# Generated caches and local patient backups
+*.tsbuildinfo
+/.superpowers/
+NutriMara-backup-*.json
