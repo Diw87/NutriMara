@@ -61,3 +61,14 @@ Depois de alterar a aplicação, gere novamente `docs/` com `npm run build:pages
 A avaliação por fotos é uma estimativa geométrica com marcações manuais. Ela não mede hidratação nem percentual de gordura; confirme a cintura com fita métrica.
 
 Referências: [publicação no GitHub Pages](https://docs.github.com/en/pages/getting-started-with-github-pages/configuring-a-publishing-source-for-your-github-pages-site) · [instalação de aplicativos web](https://developer.mozilla.org/en-US/docs/Web/Progressive_web_apps/Guides/Making_PWAs_installable).
+
+
+### Medidas por fotos
+Na edição GitHub Pages, a avaliação registra estimativas geométricas de cintura,
+abdômen e quadril a partir de pontos marcados nas duas vistas. O zoom e o ajuste
+com Shift + setas ajudam a posicionar os pontos. Os campos opcionais de fita
+métrica são independentes e a tabela mostra foto menos fita, em centímetros.
+Não há validação de precisão clínica nem medição de composição corporal por IA.
+Avaliações antigas exibem apenas a cintura, sem preencher outras medidas.
+Backups novos usam versão 2 para evitar perda silenciosa ao importar em versões
+antigas do aplicativo; esta versão também aceita backups de versão 1.

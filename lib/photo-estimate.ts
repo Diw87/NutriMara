@@ -43,3 +43,16 @@ export function estimateWaistFromPhotos(heightCm: number, front: MarkedPhoto, si
     waistEstimateCm: Math.round(perimeter),
   };
 }
+
+export type RegionMarks = Partial<Record<"abdomen" | "hip", { front: Pick<MarkedPhoto, "left" | "right">; side: Pick<MarkedPhoto, "left" | "right"> }>>;
+
+export function estimateBodyFromPhotos(heightCm: number, front: MarkedPhoto, side: MarkedPhoto, regions: RegionMarks = {}) {
+  const waist = estimateWaistFromPhotos(heightCm, front, side);
+  function estimate(key: "abdomen" | "hip") {
+    const region = regions[key];
+    if (!region) return null;
+    try { return estimateWaistFromPhotos(heightCm, { ...front, ...region.front }, { ...side, ...region.side }).waistEstimateCm; }
+    catch { throw new Error(`Confira as duas bordas do ${key === "hip" ? "quadril" : "abdômen"} nas fotos de frente e de lado.`); }
+  }
+  return { ...waist, abdomenEstimateCm: estimate("abdomen"), hipEstimateCm: estimate("hip") };
+}

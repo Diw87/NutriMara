@@ -455,3 +455,17 @@ button:focus-visible, a:focus-visible { outline: 3px solid #70b838; outline-offs
   .clinical-form-grid.two, .clinical-form-grid.three, .clinical-form-grid.five { grid-template-columns: 1fr; }
   .clinical-bmi { align-items: flex-start; flex-direction: column; gap: 5px; }
 }
+
+.photo-mark-scroll { overflow: auto; max-height: 650px; border-radius: 12px; }
+.photo-zoom { display: flex; align-items: center; gap: 12px; font-size: 13px; margin: 10px 0; }
+.photo-mark-image img { max-height: none; }
+.photo-point-abdomenLeft, .photo-point-abdomenRight { background: #277b89; }
+.photo-point-hipLeft, .photo-point-hipRight { background: #5068a0; }
+.photo-measures-table { overflow-x: auto; margin: 14px 0; }
+.photo-measures-table table { width: 100%; border-collapse: collapse; font-size: 13px; }
+.photo-measures-table caption { text-align: left; color: #506966; padding: 8px 0; }
+.photo-measures-table th, .photo-measures-table td { padding: 10px 8px; border-bottom: 1px solid #dce9e5; text-align: left; }
+.photo-measures-table thead { background: #e9f5ef; color: #27655e; }
+.photo-tape { border: 1px solid #dce9e5; padding: 16px; border-radius: 12px; }
+.photo-tape legend { color: #27655e; font-weight: 600; }
+.photo-tape p { font-size: 13px; margin-bottom: 12px; }

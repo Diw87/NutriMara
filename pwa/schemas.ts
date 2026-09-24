@@ -44,8 +44,13 @@ export const clinicalRecordSchema = clinicalRecordInputSchema.extend({ id: idSch
 const point = z.object({ x: z.number().min(0).max(1), y: z.number().min(0).max(1) });
 const marked = z.object({ width: z.number().int().min(200).max(5000), height: z.number().int().min(400).max(5000), head: point, feet: point, left: point, right: point });
 export const marksSchema = z.object({ front: marked, side: marked });
+const edges = z.object({ left: point, right: point });
+const regionPair = z.object({ front: edges, side: edges });
+export const regionMarksSchema = z.object({ abdomen: regionPair.optional(), hip: regionPair.optional() });
+export const tapeMeasuresSchema = z.object({ waistCm: optionalMeasure(400).optional(), abdomenCm: optionalMeasure(400).optional(), hipCm: optionalMeasure(400).optional() });
+
 export const photoInputSchema = z.object({ patientId: idSchema, measuredOn: dateSchema, heightCm: z.number().min(60).max(230) });
-const photoRecord = photoInputSchema.extend({ id: idSchema, frontWidthCm: z.number().positive(), sideDepthCm: z.number().positive(), waistEstimateCm: z.number().positive(), createdAt: z.string().datetime() });
+const photoRecord = photoInputSchema.extend({ id: idSchema, frontWidthCm: z.number().positive(), sideDepthCm: z.number().positive(), waistEstimateCm: z.number().positive(), abdomenEstimateCm: optionalMeasure(400).optional(), hipEstimateCm: optionalMeasure(400).optional(), tapeMeasures: tapeMeasuresSchema.optional(), regionMarks: regionMarksSchema.optional(), marks: marksSchema.optional(), createdAt: z.string().datetime() });
 export const workspaceSchema = z.object({
   patients: z.array(patientSchema.extend({ id: idSchema, createdAt: z.string().datetime() })).max(50000),
   appointments: z.array(appointmentSchema.extend({ id: idSchema, status: statusSchema })).max(200000),
@@ -54,7 +59,7 @@ export const workspaceSchema = z.object({
   photoAssessments: z.array(photoRecord).max(50000),
   clinicalRecords: z.array(clinicalRecordSchema).max(50000).default([]),
 });
-export const backupSchema = z.object({ format: z.literal("nutrimara-backup"), version: z.literal(1), id: z.string().uuid(), exportedAt: z.string().datetime(), workspace: workspaceSchema,
+export const backupSchema = z.object({ format: z.literal("nutrimara-backup"), version: z.union([z.literal(1), z.literal(2)]), id: z.string().uuid(), exportedAt: z.string().datetime(), workspace: workspaceSchema,
   photos: z.array(z.object({ id: idSchema, front: z.string().min(4).max(5600000), side: z.string().min(4).max(5600000) })).max(50000),
 });
 export type Workspace = z.infer<typeof workspaceSchema>;

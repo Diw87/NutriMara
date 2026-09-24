@@ -1,7 +1,7 @@
 import { z } from "zod";
-import { estimateWaistFromPhotos } from "../lib/photo-estimate.ts";
+import { estimateBodyFromPhotos } from "../lib/photo-estimate.ts";
 import { validatePhotoBytes } from "../lib/photo-upload.ts";
-import { appointmentSchema, backupSchema, clinicalRecordInputSchema, idSchema, marksSchema, measurementSchema, patientSchema, photoInputSchema, planSchema, statusSchema, type Backup, type PhotoRecord, type Workspace } from "./schemas.ts";
+import { appointmentSchema, backupSchema, clinicalRecordInputSchema, idSchema, marksSchema, regionMarksSchema, tapeMeasuresSchema, measurementSchema, patientSchema, photoInputSchema, planSchema, statusSchema, type Backup, type PhotoRecord, type Workspace } from "./schemas.ts";
 
 const stores = ["patients", "appointments", "measurements", "plans", "photoAssessments", "clinicalRecords", "imports"];
 type SavedPhoto = PhotoRecord & { front: Blob; side: Blob };
@@ -107,11 +107,15 @@ export function createLocalStore(name = "nutrimara-local-v1", factory: IDBFactor
     if (!(front instanceof Blob) || !(side instanceof Blob) || form.get("consent") !== "yes") throw new LocalError("Inclua duas fotos e confirme a autorização do paciente.");
     const input = photoInputSchema.parse({ patientId: Number(form.get("patientId")), measuredOn: form.get("measuredOn"), heightCm: Number(form.get("heightCm")) });
     const marks = marksSchema.parse(JSON.parse(String(form.get("marks"))));
-    const result = estimateWaistFromPhotos(input.heightCm, marks.front, marks.side);
+    const regionMarks = regionMarksSchema.parse(JSON.parse(String(form.get("regionMarks") ?? "{}")));
+    const tapeMeasures = tapeMeasuresSchema.parse(JSON.parse(String(form.get("tapeMeasures") ?? "{}")));
+    let result;
+    try { result = estimateBodyFromPhotos(input.heightCm, marks.front, marks.side, regionMarks); }
+    catch (error) { throw new LocalError(error instanceof Error ? error.message : "Confira as marcações."); }
     for (const file of [front, side]) validatePhotoBytes(new Uint8Array(await file.arrayBuffer()), file.type);
     return transaction("readwrite", async tx => {
       await ownedPatient(tx, input.patientId);
-      const id = Number(await read(tx.objectStore("photoAssessments").add({ ...input, ...result, createdAt: new Date().toISOString(), front, side })));
+      const id = Number(await read(tx.objectStore("photoAssessments").add({ ...input, ...result, regionMarks, tapeMeasures, marks, createdAt: new Date().toISOString(), front, side })));
       return { id, ...result };
     });
   }
@@ -155,7 +159,7 @@ export function createLocalStore(name = "nutrimara-local-v1", factory: IDBFactor
     const value = await transaction("readonly", snapshot);
     const photos = [];
     for (const photo of value.photos) photos.push({ id: photo.id, front: await toBase64(photo.front), side: await toBase64(photo.side) });
-    return { format: "nutrimara-backup", version: 1, id: crypto.randomUUID(), exportedAt: new Date().toISOString(), workspace: value.workspace, photos };
+    return { format: "nutrimara-backup", version: 2, id: crypto.randomUUID(), exportedAt: new Date().toISOString(), workspace: value.workspace, photos };
   }
   async function importBackup(raw: unknown) {
     const parsed = backupSchema.safeParse(raw);

@@ -108,3 +108,52 @@ test("backup inválido é rejeitado por inteiro, preservando o banco", async () 
   assert.deepEqual((await workspace(target)).patients.map(p => p.name), ["Não apagar"]);
   await assert.rejects(target.importBackup({ version: 999 }));
 });
+
+test("salva abdômen e quadril separados da cintura e preserva fita e pontos no backup", async () => {
+  const source = fresh(); const { id } = await mutate(source, patient);
+  const form = photos(id);
+  const regionMarks = {
+    abdomen: { front: { left: { x: .28, y: .56 }, right: { x: .72, y: .56 } }, side: { left: { x: .38, y: .56 }, right: { x: .62, y: .56 } } },
+    hip: { front: { left: { x: .26, y: .64 }, right: { x: .74, y: .64 } }, side: { left: { x: .36, y: .64 }, right: { x: .64, y: .64 } } },
+  };
+  form.set("regionMarks", JSON.stringify(regionMarks));
+  form.set("tapeMeasures", JSON.stringify({ waistCm: 99.5, abdomenCm: 105, hipCm: 112.5 }));
+  const response = await source.request("/api/photos", { method: "POST", body: form });
+  assert.equal(response.status, 201);
+  const saved = (await workspace(source)).photoAssessments[0];
+  assert.ok(saved.abdomenEstimateCm > saved.waistEstimateCm);
+  assert.ok(saved.hipEstimateCm > saved.abdomenEstimateCm);
+  assert.equal(saved.tapeMeasures.hipCm, 112.5);
+  assert.deepEqual(saved.regionMarks, regionMarks);
+  const target = fresh(); await target.importBackup(JSON.parse(JSON.stringify(await source.exportBackup())));
+  const restored = (await workspace(target)).photoAssessments[0];
+  assert.equal(restored.hipEstimateCm, saved.hipEstimateCm);
+  assert.equal(restored.tapeMeasures.waistCm, 99.5);
+  assert.deepEqual(restored.regionMarks, regionMarks);
+});
+
+test("rejeita marcação adicional incompleta ou invertida e fita inválida sem salvar", async () => {
+  const store = fresh(); const { id } = await mutate(store, patient);
+  for (const value of [{ hip: { front: { left: front.left } } }, { hip: { front: { left: front.right, right: front.left }, side: { left: side.left, right: side.right } } }]) {
+    const form = photos(id); form.set("regionMarks", JSON.stringify(value));
+    assert.equal((await store.request("/api/photos", { method: "POST", body: form })).status, 400);
+  }
+  const form = photos(id); form.set("tapeMeasures", JSON.stringify({ hipCm: -10 }));
+  assert.equal((await store.request("/api/photos", { method: "POST", body: form })).status, 400);
+  assert.equal((await workspace(store)).photoAssessments.length, 0);
+});
+
+
+test("importa backup antigo sem inventar medidas novas", async () => {
+  const source = fresh(); const { id } = await mutate(source, patient);
+  await source.request("/api/photos", { method: "POST", body: photos(id) });
+  const backup = await source.exportBackup();
+  assert.equal(backup.version, 2);
+  backup.version = 1;
+  for (const key of ["abdomenEstimateCm", "hipEstimateCm", "tapeMeasures", "regionMarks", "marks"]) delete backup.workspace.photoAssessments[0][key];
+  const target = fresh(); await target.importBackup(backup);
+  const entry = (await workspace(target)).photoAssessments[0];
+  assert.equal(entry.waistEstimateCm, 109);
+  assert.equal(entry.hipEstimateCm, undefined);
+  assert.equal(entry.abdomenEstimateCm, undefined);
+});
