@@ -1,15 +1,20 @@
-import { useState } from "react";
+import {recoveryFromHash} from './recovery';
+import PasswordReset from './password-reset';
+import { useEffect, useState } from "react";
 import { createRoot } from "react-dom/client";
 import ClinicApp from "../components/clinic-app";
-import { createLocalStore } from "./local-store";
-import PwaTools from "./pwa-tools";
+import { createCloudStore, session } from "./cloud-client";
+import CloudLogin from "./cloud-login";
+import CloudTools from "./cloud-tools";
 import "../app/globals.css";
 import "./pwa.css";
-
-const store = createLocalStore();
-const client = { request: store.request, photoUrl: store.photoUrl, assetUrl: (name: string) => `${import.meta.env.BASE_URL}${name}` };
-function App() {
-  const [revision, setRevision] = useState(0);
-  return <ClinicApp key={revision} client={client} tools={<PwaTools store={store} onImported={() => setRevision(value => value + 1)} />} />;
+const initialRecovery=recoveryFromHash(window.location.hash);
+if(window.location.hash.includes('access_token=')||window.location.hash.includes('error_description='))history.replaceState(null,'',window.location.pathname+window.location.search);
+const store=createCloudStore();
+const client={...store,assetUrl:(name:string)=>`${import.meta.env.BASE_URL}${name}`,cloud:true};
+function App(){const [recovery,setRecovery]=useState(initialRecovery);const [signed,setSigned]=useState(!!session());const [revision,setRevision]=useState(0);
+ useEffect(()=>{const update=()=>setSigned(!!session());window.addEventListener('nutri-session',update);window.addEventListener('storage',update);return()=>{window.removeEventListener('nutri-session',update);window.removeEventListener('storage',update);};},[]);
+ if(recovery)return <PasswordReset recovery={recovery} onDone={()=>setRecovery(null)}/>;
+ return signed?<ClinicApp key={revision} client={client} tools={<CloudTools store={store} onRefresh={()=>setRevision(v=>v+1)}/>}/>:<CloudLogin/>;
 }
-createRoot(document.getElementById("root")!).render(<App />);
+createRoot(document.getElementById("root")!).render(<App/>);

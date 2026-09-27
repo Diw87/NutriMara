@@ -469,3 +469,8 @@ button:focus-visible, a:focus-visible { outline: 3px solid #70b838; outline-offs
 .photo-tape { border: 1px solid #dce9e5; padding: 16px; border-radius: 12px; }
 .photo-tape legend { color: #27655e; font-weight: 600; }
 .photo-tape p { font-size: 13px; margin-bottom: 12px; }
+
+.ai-panel { margin: 18px 0; padding: 22px; }
+.ai-panel textarea { display: block; width: 100%; margin: 12px 0; padding: 12px; border: 1px solid #a8c8c0; border-radius: 10px; font-size: 13px; }
+.ai-draft { margin-top: 18px; padding: 18px; background: #eff8f4; white-space: pre-wrap; }
+.ai-draft h4 { margin: 12px 0 5px; }

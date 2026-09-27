@@ -5,7 +5,7 @@ import { toast } from "sonner";
 import type { createLocalStore } from "./local-store";
 
 type InstallEvent = Event & { prompt(): Promise<void>; userChoice: Promise<{ outcome: "accepted" | "dismissed" }> };
-export default function PwaTools({ store, onImported }: { store: ReturnType<typeof createLocalStore>; onImported: () => void }) {
+export default function PwaTools({ store, onImported, cloud = false }: { store: ReturnType<typeof createLocalStore>; onImported: () => void; cloud?: boolean }) {
   const [installPrompt, setInstallPrompt] = useState<InstallEvent | null>(null);
   const [installed, setInstalled] = useState(false);
   const [online, setOnline] = useState(navigator.onLine);
@@ -74,7 +74,7 @@ export default function PwaTools({ store, onImported }: { store: ReturnType<type
   }
   return <>
     <section className="pwa-bar" aria-label="Instalação e cópias de segurança">
-      <div className="pwa-storage"><HardDrive size={19} /><div><strong>Dados neste dispositivo</strong><span>{!online ? <><WifiOff size={13} /> Sem internet</> : offlineReady ? "Pronto para usar sem internet" : "Faça cópias de segurança regularmente"}</span></div></div>
+      <div className="pwa-storage"><HardDrive size={19} /><div><strong>{cloud ? "Dados no consultório online" : "Dados neste dispositivo"}</strong><span>{!online ? <><WifiOff size={13} /> Sem internet</> : cloud ? "Internet necessária para acessar e salvar" : offlineReady ? "Pronto para usar sem internet" : "Faça cópias de segurança regularmente"}</span></div></div>
       <div className="pwa-actions">
         <button className="button button-secondary" disabled={busy} onClick={() => void exportData()}><Download size={16} /> Exportar cópia</button>
         <button className="button button-secondary" disabled={busy} onClick={() => importInput.current?.click()}><Upload size={16} /> Importar cópia</button>
@@ -82,7 +82,7 @@ export default function PwaTools({ store, onImported }: { store: ReturnType<type
       </div>
       <input className="pwa-file-input" ref={importInput} type="file" accept=".json,application/json" aria-label="Importar cópia do NutriMara" onChange={event => { const file = event.target.files?.[0]; event.target.value = ""; if (file) void importData(file); }} />
     </section>
-    <p className="pwa-data-note">Os registros e fotos ficam neste navegador, sem sincronização automática. Exporte uma cópia antes de trocar de aparelho ou limpar os dados. Importar acrescenta os registros da cópia sem apagar os atuais.</p>
+    <p className="pwa-data-note">{cloud ? "Registros e fotos ficam no consultório online. Exporte uma cópia para manter seu backup. As cópias baixadas contêm dados privados." : "Os registros e fotos ficam neste navegador, sem sincronização automática. Exporte uma cópia antes de trocar de aparelho ou limpar os dados. Importar acrescenta os registros da cópia sem apagar os atuais."}</p>
     <Dialog open={help} onOpenChange={setHelp}><DialogContent className="form-dialog"><DialogHeader><DialogTitle>Instalar o NutriMara</DialogTitle><DialogDescription>Abra pelo link do GitHub e adicione o aplicativo ao seu dispositivo.</DialogDescription></DialogHeader><div className="install-help"><p><strong>Android ou computador:</strong> no Chrome ou Edge, abra o menu do navegador e procure “Instalar aplicativo” ou “Adicionar à tela inicial”.</p><p><strong>iPhone ou iPad:</strong> abra no Safari, toque em Compartilhar e escolha “Adicionar à Tela de Início”.</p><p>Exporte uma cópia antes de instalar ou mudar de navegador. Se necessário, importe a cópia no aplicativo.</p></div><button className="button button-primary" onClick={() => setHelp(false)}>Entendi</button></DialogContent></Dialog>
   </>;
 }

@@ -10,3 +10,11 @@
 @media (max-width: 1300px) { .pwa-bar { margin-left: 24px; margin-right: 24px; } .pwa-data-note { margin-left: 26px; margin-right: 26px; } }
 @media (max-width: 760px) { .pwa-bar { margin: 14px 16px 0; padding: 16px; align-items: flex-start; flex-direction: column; } .pwa-actions { width: 100%; } .pwa-actions .button { flex: 1 1 auto; justify-content: center; } .pwa-data-note { margin: 8px 18px 0; } }
 @media print { .pwa-bar, .pwa-data-note { display: none; } }
+
+.cloud-login { max-width: 460px; margin: 6vh auto; padding: 28px; }
+.cloud-login img { width: 170px; display: block; margin: 0 auto 20px; }
+.cloud-login form,.cloud-login label { display: grid; gap: 10px; margin: 16px 0; }
+.cloud-login input { width: 100%; padding: 12px; border: 1px solid #aacac4; border-radius: 8px; }
+.cloud-login .text-button { display: block; margin: 12px 0; }
+.cloud-toolbar { display: flex; flex-wrap: wrap; gap: 12px; align-items: center; padding: 20px; background: #e9f5ef; }
+.cloud-toolbar p { width: 100%; }

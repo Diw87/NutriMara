@@ -4,9 +4,9 @@ Aplicativo da nutricionista **Marakesia Nascimento — CRN 11-6356**, com pacien
 
 ## Abrir e instalar
 
-Depois de ativar o GitHub Pages, a interface fica em **https://diw87.github.io/NutriMara/**.
+A interface fica em **https://diw87.github.io/NutriMara/**.
 
-Abra esse endereço no Chrome ou Edge e toque em **Instalar aplicativo**. No iPhone/iPad, abra no Safari e use **Compartilhar → Adicionar à Tela de Início**. Após o primeiro carregamento completo, a versão instalada também abre sem internet. O botão mostra instruções quando o navegador não disponibiliza uma instalação direta.
+Abra esse endereço no Chrome ou Edge e toque em **Instalar aplicativo**. No iPhone/iPad, abra no Safari e use **Compartilhar → Adicionar à Tela de Início**. A instalação mantém um atalho; os registros online exigem internet. O botão mostra instruções quando o navegador não disponibiliza uma instalação direta.
 
 ## Ativar a publicação
 
@@ -19,15 +19,28 @@ Os arquivos compilados já estão em `docs/`. Não é necessário configurar Git
 
 O GitHub Free oferece Pages em repositórios públicos. Um repositório privado requer um plano compatível, como GitHub Pro. A visibilidade deste repositório não é alterada pelo aplicativo ou pelos scripts.
 
-## Onde ficam os registros
+## Consultório online
 
-- A edição GitHub Pages guarda pacientes e fotos **neste navegador/dispositivo**, usando IndexedDB. Ela não usa a conta GitHub como banco de dados e não exige login no ChatGPT.
-- A aba **Fichas** guarda uma ficha clínica por paciente, com anamnese, histórico, rotina alimentar, antropometria, IMC calculado, metas e conduta. O botão **Imprimir / PDF** abre a impressão do navegador para imprimir ou escolher **Salvar como PDF**.
-- Não há sincronização automática entre computadores, celulares ou navegadores. Para transferir dados, use **Exportar cópia** e **Importar cópia**.
-- A cópia inclui cadastros, consultas, medidas, planos e fotos. Importar acrescenta os registros e preserva os existentes; repetir o mesmo arquivo é bloqueado. Cópias exportadas em momentos diferentes podem conter pacientes em comum.
-- Guarde o backup com cuidado: ele contém os dados clínicos e fotografias. Exporte antes de limpar os dados do navegador ou trocar de aparelho. Não trabalhe em navegação anônima se precisa manter os registros.
-- Registros da antiga versão hospedada continuam naquele ambiente; eles não são migrados automaticamente.
-- O GitHub recebe somente código e recursos visuais. Nenhum registro real ou fotografia de paciente acompanha esta publicação.
+A interface usa uma conta compartilhada autorizada no servidor. No primeiro acesso, escolha **Configurar senha** e confirme o e-mail. O apelido é resolvido pelo servidor; o endereço privado não faz parte do repositório.
+
+- Cadastros, fichas, medidas, planos e fotos ficam no Supabase; o GitHub publica somente código e recursos visuais.
+- As tabelas bloqueiam acesso direto de visitantes e de usuários autenticados. As funções verificam o usuário, a confirmação de e-mail e a autorização da conta antes de acessar dados.
+- Fotos usam armazenamento privado e links temporários. Edições com versão desatualizada são recusadas para evitar sobrescrever o trabalho de outro dispositivo.
+- A interface verifica atualizações ao retornar à janela e a cada 30 segundos. Após interação com a página, avisa para salvar e atualizar manualmente, preservando formulários.
+- **Fichas → Imprimir / PDF** permite imprimir ou escolher **Salvar como PDF** no navegador.
+- **Trazer cadastros deste navegador** importa os dados antigos após confirmação, mantendo o original. **Exportar cadastros antigos deste navegador** funciona também antes do login.
+- **Exportar cópia** gera backup dos dados online, incluindo fotos. **Importar cópia** acrescenta registros e bloqueia a repetição do mesmo lote. Cópias diferentes podem conter pacientes em comum.
+- É necessária conexão para acessar e salvar registros online. A instalação no dispositivo não muda essa exigência.
+
+## Configuração do servidor
+
+O esquema está em `supabase/sql/online.sql`. O registro autorizado de `nutri_access` deve ser configurado privadamente pelo administrador, nunca por código público. As três funções estão em `supabase/functions/`.
+
+1. Em **Authentication → URL Configuration**, configure Site URL e Redirect URLs para `https://diw87.github.io/NutriMara/`. Mantenha a confirmação de e-mail habilitada. Use SMTP próprio se o serviço de e-mail do projeto exigir.
+2. A função `nutri-auth` permite login/cadastro/recuperação por apelido com limites de tentativas. Ela usa `verify_jwt=false`, pois autentica a senha com o serviço Auth. As funções `nutri-clinic` e `nutri-ai` usam `verify_jwt=true` e validam a conta autorizada internamente.
+3. Em **Edge Functions → Secrets**, cadastre `OPENAI_API_KEY`. Opcional: `OPENAI_MODEL` (padrão `gpt-4.1-mini`). Nunca coloque a chave no navegador, no GitHub ou em arquivos de backup.
+4. Os assistentes só enviam o contexto após revisão e consentimento. Geram rascunhos de planos e análises de evolução para revisão profissional. Não diagnosticam nem substituem a nutricionista. Sem a chave configurada, exibem indisponibilidade real.
+5. Antes do uso clínico, conclua o primeiro acesso e confira um cadastro fictício nos dois dispositivos, incluindo edição simultânea, foto e backup. A confirmação do e-mail e o teste da IA dependem das credenciais do titular.
 
 ## Desenvolvimento
 

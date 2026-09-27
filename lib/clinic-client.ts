@@ -1,4 +1,5 @@
 export interface ClinicClient {
+  cloud?: boolean;
   request: (path: string, init?: RequestInit) => Promise<Response>;
   photoUrl: (id: number, view: "front" | "side") => Promise<string>;
   assetUrl: (name: string) => string;
