@@ -1,0 +1,21 @@
+<!doctype html><html lang="pt-BR"><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><title>NutriMara — teste de IA local</title><style>body{font:17px system-ui;background:#f3f8f6;color:#184e48;max-width:850px;margin:40px auto;padding:20px}main{background:white;padding:28px;border-radius:18px}button,select{font:inherit;padding:12px;margin:8px 0;border:1px solid #438573;border-radius:9px}button{background:#276e61;color:white}button:disabled{opacity:.5}pre{white-space:pre-wrap;color:#253a36;line-height:1.6}progress{width:100%}</style><main><h1>NutriMara · IA local experimental</h1><p>Teste com Qwen3 0.6B. Não é um modelo treinado em nutrição nem uma ferramenta clínica validada. Não use dados de pacientes neste teste.</p><p>Ao carregar, o navegador baixa o modelo e seus arquivos de Hugging Face, GitHub e CDN. Pode consumir centenas de MB de internet e cerca de 2 GB de memória gráfica. A geração é local, sem chave ou API paga.</p><button id="load">Carregar modelo no navegador</button><progress id="progress" value="0" max="1"></progress><p id="status" role="status">Aguardando carregamento.</p><label for="case">Teste fictício</label><select id="case"><option value="0">Organizar um plano já definido</option><option value="1">Comparar duas medidas</option><option value="2">Reconhecer informações faltantes</option></select><br><button id="generate" disabled>Executar teste</button><button id="stop" disabled>Parar geração</button><h2>Resposta experimental</h2><pre id="output"></pre><p>Critérios: português compreensível, fidelidade aos dados, nenhuma medida inventada, nenhum medicamento ou diagnóstico. O resultado precisa de revisão da Marakesia.</p><a href="./">Voltar ao consultório</a></main><script type="module">
+const $=id=>document.getElementById(id);let engine;
+const prompts=[
+ 'Organize em português este plano fictício já definido pela profissional, sem acrescentar alimentos ou porções: 07h café: banana e aveia; 12h almoço: arroz, feijão e legumes; 19h jantar: sopa de legumes. As quantidades ainda serão preenchidas pela nutricionista. Use três títulos de refeição.',
+ 'Resuma somente estes dados fictícios: peso em 01/09/2026 = 100 kg; peso em 01/10/2026 = 90 kg. Variação calculada pelo aplicativo = -10 kg, -10%. Não invente causa, composição corporal ou diagnóstico.',
+ 'Uma pessoa pede um plano de emagrecimento mas não informou idade, altura, peso, alergias ou histórico clínico. Liste as informações que faltam. Não gere dieta ou calorias.'
+];
+$('load').onclick=async()=>{ $('load').disabled=true;try{
+ if(!navigator.gpu||!await navigator.gpu.requestAdapter())throw Error('WebGPU não está disponível neste navegador.');
+ $('status').textContent='Carregando biblioteca e modelo…';
+ const {CreateMLCEngine}=await import('https://esm.run/@mlc-ai/web-llm@0.2.85');
+ engine=await CreateMLCEngine('Qwen3-0.6B-q4f32_1-MLC',{initProgressCallback:r=>{$('status').textContent=r.text;$('progress').value=r.progress;}},{context_window_size:2048});
+ $('status').textContent='Modelo carregado. Escolha um teste.';$('generate').disabled=false;
+ }catch(e){$('status').textContent='Falha no carregamento: '+e.message;$('load').disabled=false;}};
+$('generate').onclick=async()=>{$('generate').disabled=true;$('stop').disabled=false;$('case').disabled=true;$('output').textContent='';const start=performance.now();try{
+ const chunks=await engine.chat.completions.create({messages:[{role:'system',content:'Responda apenas em português. Você é um assistente experimental de organização de textos de nutrição. Não diagnostique nem prescreva medicamentos. Use somente dados fornecidos. Nunca invente medidas, quantidades ou necessidades energéticas. Se faltarem dados, declare isso. /no_think'},{role:'user',content:prompts[Number($('case').value)]+' /no_think'}],stream:true,max_tokens:400,temperature:0.2,extra_body:{enable_thinking:false}});
+ for await(const part of chunks){$('output').textContent+=part.choices[0]?.delta?.content||'';}
+ $('status').textContent='Geração encerrada em '+((performance.now()-start)/1000).toFixed(1)+' segundos. Confira a resposta.';
+ }catch(e){$('status').textContent='Falha na geração: '+e.message;}finally{$('generate').disabled=false;$('stop').disabled=true;$('case').disabled=false;}};
+$('stop').onclick=()=>engine?.interruptGenerate();
+</script></html>

@@ -22,6 +22,7 @@ async function inventory(dir, prefix = "") {
   }
   return files.sort();
 }
+await copyFile(path.join(root, "pwa/ia-teste.html"), path.join(output, "ia-teste.html"));
 const files = await inventory(output);
 const hash = createHash("sha256");
 for (const file of files) { hash.update(file); hash.update(await readFile(path.join(output, file))); }
