@@ -38,9 +38,10 @@ O esquema está em `supabase/sql/online.sql`. O registro autorizado de `nutri_ac
 
 1. Em **Authentication → URL Configuration**, configure Site URL e Redirect URLs para `https://diw87.github.io/NutriMara/`. Mantenha a confirmação de e-mail habilitada. Use SMTP próprio se o serviço de e-mail do projeto exigir.
 2. A função `nutri-auth` permite login/cadastro/recuperação por apelido com limites de tentativas. Ela usa `verify_jwt=false`, pois autentica a senha com o serviço Auth. As funções `nutri-clinic` e `nutri-ai` usam `verify_jwt=true` e validam a conta autorizada internamente.
-3. A versão gratuita usa modelos editáveis de 3 ou 6 refeições e resumo aritmético da evolução no navegador. Não chama a OpenAI nem exige chave ou créditos.
+3. A versão gratuita inclui modelos editáveis, resumo aritmético e IA local experimental (Qwen3 0.6B / WebLLM fixado em 0.2.82). Em Plano alimentar ou Evolução, abra o assistente e clique em Carregar IA local. O modelo baixa arquivos de CDN/Hugging Face/GitHub e executa a geração no navegador, sem OpenAI, chave ou créditos. Requer WebGPU e cerca de 2 GB de memória gráfica por máquina.
 4. Os modelos são estruturas para Marakesia preencher alimentos, porções e substituições. Não são prescrições automáticas nem calculam necessidades energéticas. A evolução compara peso e cintura com fita em datas diferentes; estimativas por fotos ficam separadas.
-5. Fichas, dados online, impressão/PDF e importação continuam disponíveis. GitHub Pages e Supabase ficam sujeitos aos limites de seus planos. O código antigo da função de IA permanece no repositório, sem uso pela interface gratuita.
+5. A IA organiza somente planos já preenchidos ou resume cálculos prontos; não cria prescrição personalizada. O pedido usa apenas refeições/orientações ou comparação numérica, sem a ficha completa ou fotos. Revise o rascunho; copiar ou colocar o texto nas orientações não salva o plano automaticamente. Trocar paciente/dados interrompe a geração e descarta o rascunho anterior.
+6. Fichas, dados online, impressão/PDF e importação continuam disponíveis. GitHub Pages e Supabase ficam sujeitos aos limites de seus planos. O código antigo da função de IA permanece no repositório, sem uso pela interface gratuita.
 
 ## Desenvolvimento
 

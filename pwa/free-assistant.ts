@@ -20,3 +20,21 @@ export function evolutionSummary(context:string):{summary:string;observations:st
  observations.push('Estimativas por fotos não entram na comparação com medidas feitas por fita.');
  return {summary:'Resumo calculado a partir dos registros. As diferenças não indicam, por si só, melhora clínica ou causa da mudança.',observations};
 }
+
+export function cleanLocalAnswer(text:string):string {
+ return text.replace(/<think>[\s\S]*?(?:<\/think>|$)/gi,'')
+  .replace(/<\/?think>/gi,'').replace(/<\/?(?:t(?:h(?:i(?:n(?:k)?)?)?)?)?$/i,'').trim();
+}
+export function localAIRequest(mode:'plan'|'evolution',context:string,plan?:Plan):string {
+ let request:string;
+ if(mode==='plan'){
+  if(!plan?.meals.some(meal=>meal.foods.trim()&&!meal.foods.includes('[preencher]')))throw new Error('Preencha primeiro os alimentos e as quantidades no editor.');
+  const data={titulo:plan.title,refeicoes:plan.meals.map(m=>({horario:m.time,refeicao:m.label,alimentos:m.foods})),orientacoes:plan.instructions};
+  request='Organize o plano abaixo em português, com um título por refeição. Preserve todos os alimentos, porções, horários e orientações. Apresente somente o texto final, sem comentários sobre a tarefa. Dados do plano:\n'+JSON.stringify(data);
+ }else{
+  const data=evolutionSummary(context);
+  request='Escreva um resumo curto em português das medidas abaixo. Os cálculos já estão prontos. Preserve números e datas. Apresente somente o resumo, sem copiar instruções e sem inferir causas ou diagnósticos. Dados calculados:\n'+[data.summary,...data.observations].join('\n');
+ }
+ if(request.length>4200)throw new Error('O plano está muito longo para esta IA pequena. Reduza o texto antes de tentar; nenhum dado foi cortado.');
+ return request+' /no_think';
+}

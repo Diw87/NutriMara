@@ -1,6 +1,6 @@
 /* Replaced with the exact build inventory by build-pages.mjs. */
-const VERSION = "d6a916c341b41429";
-const ASSETS = ["assets/index-BqylAvvF.js","assets/index-DjSslrp1.css","ia-teste.html","icons/apple-touch-icon.png","icons/icon-192.png","icons/icon-512.png","icons/icon-maskable-512.png","index.html","manifest.webmanifest","marakesia-logo.png"];
+const VERSION = "8f59acc51e043892";
+const ASSETS = ["assets/index-BkH97xhj.css","assets/index-JRK4ATeh.js","ia-teste.html","icons/apple-touch-icon.png","icons/icon-192.png","icons/icon-512.png","icons/icon-maskable-512.png","index.html","manifest.webmanifest","marakesia-logo.png"];
 const SCOPE = new URL(self.registration.scope);
 const PREFIX = `nutrimara:${SCOPE.pathname}:`;
 const CACHE = PREFIX + VERSION;
