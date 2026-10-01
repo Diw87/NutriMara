@@ -14,7 +14,7 @@ Deno.serve(async req=>{
   const auth=authClient();let result;
   if(b.action==='login')result=await auth.auth.signInWithPassword({email:a.email,password:String(b.password)});
   else if(b.action==='setup'){
-   if(typeof b.password!=='string'||b.password.length<12||b.password.length>128)return reply({error:'Use uma senha com 12 a 128 caracteres.'},400);
+   if(typeof b.password!=='string'||b.password.length<6||b.password.length>128)return reply({error:'Use uma senha com 6 a 128 caracteres.'},400);
    await limit(service,'setup:'+String(b.username),3600,3);
    result=await auth.auth.signUp({email:a.email,password:b.password,options:{emailRedirectTo:'https://diw87.github.io/NutriMara/'}});
   }else if(b.action==='recover'){
