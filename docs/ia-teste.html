@@ -8,7 +8,7 @@ const prompts=[
 $('load').onclick=async()=>{ $('load').disabled=true;try{
  if(!navigator.gpu||!await navigator.gpu.requestAdapter())throw Error('WebGPU não está disponível neste navegador.');
  $('status').textContent='Carregando biblioteca e modelo…';
- const {CreateMLCEngine}=await import('https://esm.run/@mlc-ai/web-llm@0.2.85');
+ const {CreateMLCEngine}=await import('https://esm.run/@mlc-ai/web-llm@0.2.82');
  engine=await CreateMLCEngine('Qwen3-0.6B-q4f32_1-MLC',{initProgressCallback:r=>{$('status').textContent=r.text;$('progress').value=r.progress;}},{context_window_size:2048});
  $('status').textContent='Modelo carregado. Escolha um teste.';$('generate').disabled=false;
  }catch(e){$('status').textContent='Falha no carregamento: '+e.message;$('load').disabled=false;}};
