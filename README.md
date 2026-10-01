@@ -38,9 +38,9 @@ O esquema está em `supabase/sql/online.sql`. O registro autorizado de `nutri_ac
 
 1. Em **Authentication → URL Configuration**, configure Site URL e Redirect URLs para `https://diw87.github.io/NutriMara/`. Mantenha a confirmação de e-mail habilitada. Use SMTP próprio se o serviço de e-mail do projeto exigir.
 2. A função `nutri-auth` permite login/cadastro/recuperação por apelido com limites de tentativas. Ela usa `verify_jwt=false`, pois autentica a senha com o serviço Auth. As funções `nutri-clinic` e `nutri-ai` usam `verify_jwt=true` e validam a conta autorizada internamente.
-3. Em **Edge Functions → Secrets**, cadastre `OPENAI_API_KEY`. Opcional: `OPENAI_MODEL` (padrão `gpt-4.1-mini`). Nunca coloque a chave no navegador, no GitHub ou em arquivos de backup.
-4. Os assistentes só enviam o contexto após revisão e consentimento. Geram rascunhos de planos e análises de evolução para revisão profissional. Não diagnosticam nem substituem a nutricionista. Sem a chave configurada, exibem indisponibilidade real.
-5. Antes do uso clínico, conclua o primeiro acesso e confira um cadastro fictício nos dois dispositivos, incluindo edição simultânea, foto e backup. A confirmação do e-mail e o teste da IA dependem das credenciais do titular.
+3. A versão gratuita usa modelos editáveis de 3 ou 6 refeições e resumo aritmético da evolução no navegador. Não chama a OpenAI nem exige chave ou créditos.
+4. Os modelos são estruturas para Marakesia preencher alimentos, porções e substituições. Não são prescrições automáticas nem calculam necessidades energéticas. A evolução compara peso e cintura com fita em datas diferentes; estimativas por fotos ficam separadas.
+5. Fichas, dados online, impressão/PDF e importação continuam disponíveis. GitHub Pages e Supabase ficam sujeitos aos limites de seus planos. O código antigo da função de IA permanece no repositório, sem uso pela interface gratuita.
 
 ## Desenvolvimento
 

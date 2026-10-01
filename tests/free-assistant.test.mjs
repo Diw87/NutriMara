@@ -1,0 +1,5 @@
+import test from 'node:test';import assert from 'node:assert/strict';
+import {planTemplate,evolutionSummary} from '../pwa/free-assistant.ts';
+test('modelos são editáveis e não inventam porções clínicas',()=>{assert.equal(planTemplate('six').meals.length,6);assert.equal(planTemplate('three').meals.length,3);assert.ok(planTemplate('six').meals.every(m=>m.foods.includes('[preencher]')));});
+test('evolução ordena datas, ignora valores nulos e separa fotos',()=>{const r=evolutionSummary(JSON.stringify({medidas:[{data:'2026-10-01',pesoKg:90,cinturaFitaCm:100},{data:'2026-09-01',pesoKg:100,cinturaFitaCm:110},{data:'2026-09-15',pesoKg:null}],estimativasPorFotos:[{cinturaEstimadaCm:75}]}));assert.match(r.observations[0],/-10 kg \(-10%\)/);assert.match(r.observations[1],/-10 cm/);});
+test('não calcula tendência com uma medida ou datas iguais',()=>{assert.match(evolutionSummary('{"medidas":[]}').observations[0],/duas medidas/);assert.match(evolutionSummary(JSON.stringify({medidas:[{data:'2026-10-01',pesoKg:90},{data:'2026-10-01',pesoKg:91}]})).observations[0],/mesma data/);});
