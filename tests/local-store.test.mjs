@@ -148,7 +148,7 @@ test("importa backup antigo sem inventar medidas novas", async () => {
   const source = fresh(); const { id } = await mutate(source, patient);
   await source.request("/api/photos", { method: "POST", body: photos(id) });
   const backup = await source.exportBackup();
-  assert.equal(backup.version, 2);
+  assert.equal(backup.version, 3);
   backup.version = 1;
   for (const key of ["abdomenEstimateCm", "hipEstimateCm", "tapeMeasures", "regionMarks", "marks"]) delete backup.workspace.photoAssessments[0][key];
   const target = fresh(); await target.importBackup(backup);
@@ -156,4 +156,40 @@ test("importa backup antigo sem inventar medidas novas", async () => {
   assert.equal(entry.waistEstimateCm, 109);
   assert.equal(entry.hipEstimateCm, undefined);
   assert.equal(entry.abdomenEstimateCm, undefined);
+});
+
+test('backup v3 mantém módulos e anexos ao remapear pacientes e arquivos locais', async () => {
+  const pdf = Buffer.from('%PDF-1.4\n1 0 obj\n<<>>\nendobj\n%%EOF\n');
+  const backup = {format:'nutrimara-backup',version:3,id:crypto.randomUUID(),exportedAt:'2026-10-02T12:00:00.000Z',workspace:{
+    patients:[{id:7,name:'Paciente importado',phone:'',birthDate:'',goal:'',notes:'',nickname:'Apelido',tags:'retorno',createdAt:'2026-10-02T12:00:00.000Z'}],
+    appointments:[],measurements:[],plans:[],photoAssessments:[],clinicalRecords:[],
+    clinicalEntries:[{id:21,patientId:7,module:'attachments',title:'Exames',recordedOn:'2026-10-02',status:'Arquivado',fields:{description:'Original preservado'},createdAt:'2026-10-02T12:00:00.000Z',updatedAt:'2026-10-02T12:00:00.000Z',attachment:{name:'resultado.pdf',contentType:'application/pdf',size:pdf.length}}],
+  },photos:[],attachments:[{id:21,data:pdf.toString('base64')}]};
+  const target=fresh();await mutate(target,{...patient,name:'Cadastro existente'});
+  await target.importBackup(backup);
+  const current=await workspace(target);
+  assert.ok(Array.isArray(current.clinicalEntries));
+  const saved=current.clinicalEntries[0];
+  const imported=current.patients.find(p=>p.name==='Paciente importado');
+  assert.equal(saved.patientId,imported.id);
+  assert.equal(saved.status,'Arquivado');
+  assert.equal(imported.nickname,'Apelido');assert.equal(imported.tags,'retorno');
+  assert.equal(saved.attachmentBlob,undefined);
+  const response=await target.request(`/api/attachments/url?id=${saved.id}`);
+  assert.equal(response.status,200);
+  const {url}=await response.json();
+  assert.deepEqual(Buffer.from(await (await fetch(url)).arrayBuffer()),pdf);URL.revokeObjectURL(url);
+  const restored=await target.exportBackup();
+  assert.equal(restored.version,3);
+  assert.deepEqual(restored.attachments,[{id:saved.id,data:pdf.toString('base64')}]);
+  await assert.rejects(target.importBackup(backup),/já foi importada/);
+});
+
+test('anexo inválido não importa parcialmente os pacientes de um backup', async () => {
+  const source=fresh();await mutate(source,patient);
+  const backup=await source.exportBackup();
+  backup.version=3;backup.attachments=[{id:999,data:'JVBERi0xLjQKJSVFT0Y='}];
+  const target=fresh();await mutate(target,{...patient,name:'Preservar cadastro'});
+  await assert.rejects(target.importBackup(backup));
+  assert.deepEqual((await workspace(target)).patients.map(p=>p.name),['Preservar cadastro']);
 });

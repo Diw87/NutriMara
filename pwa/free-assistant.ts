@@ -28,7 +28,7 @@ export function cleanLocalAnswer(text:string):string {
 export function localAIRequest(mode:'plan'|'evolution',context:string,plan?:Plan):string {
  let request:string;
  if(mode==='plan'){
-  if(!plan?.meals.some(meal=>meal.foods.trim()&&!meal.foods.includes('[preencher]')))throw new Error('Preencha primeiro os alimentos e as quantidades no editor.');
+  if(!plan?.meals.some(meal=>meal.foods.trim()&&!meal.foods.includes('[preencher]')))throw new Error('Preencha primeiro os alimentos e as quantidades no editor ou use Criar rascunho automático.');
   const data={titulo:plan.title,refeicoes:plan.meals.map(m=>({horario:m.time,refeicao:m.label,alimentos:m.foods})),orientacoes:plan.instructions};
   request='Organize o plano abaixo em português, com um título por refeição. Preserve todos os alimentos, porções, horários e orientações. Apresente somente o texto final, sem comentários sobre a tarefa. Dados do plano:\n'+JSON.stringify(data);
  }else{

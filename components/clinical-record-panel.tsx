@@ -1,7 +1,7 @@
 "use client";
 
-import { FormEvent, useEffect, useMemo, useState } from "react";
-import { CalendarDays, Check, FileText, Printer, Save, Stethoscope } from "lucide-react";
+import { FormEvent, useMemo, useState } from "react";
+import { CalendarDays, Check, FileText, Printer, RotateCcw, Save, Stethoscope } from "lucide-react";
 import type { ClinicClient } from "@/lib/clinic-client";
 import { createPortal } from "react-dom";
 import { Input } from "@/components/ui/input";
@@ -36,10 +36,11 @@ export type ClinicalRecord = {
   returnDate: string;
   professionalNotes: string;
   updatedAt: string;
+  _version?: number;
 };
 
 type Patient = { id: number; name: string; phone: string; birthDate: string; goal: string; notes: string; createdAt: string };
-type ClinicalForm = Omit<ClinicalRecord, "id" | "patientId" | "updatedAt" | "weightKg" | "heightCm" | "waistCm" | "hipCm" | "bodyFatPct"> & {
+type ClinicalForm = Omit<ClinicalRecord, "id" | "patientId" | "updatedAt" | "_version" | "weightKg" | "heightCm" | "waistCm" | "hipCm" | "bodyFatPct"> & {
   weightKg: string;
   heightCm: string;
   waistCm: string;
@@ -61,7 +62,7 @@ function formFromRecord(record: ClinicalRecord | null, patient: Patient) {
     const form = emptyForm(currentDate());
     return { ...form, mainComplaint: patient.goal ? `Objetivo informado: ${patient.goal}` : "" };
   }
-  return Object.fromEntries(Object.entries(record).filter(([key]) => !["id", "patientId", "updatedAt"].includes(key)).map(([key, value]) => [key, value === null ? "" : String(value)])) as ClinicalForm;
+  return Object.fromEntries(Object.entries(record).filter(([key]) => !["id", "patientId", "updatedAt", "_version"].includes(key)).map(([key, value]) => [key, value === null ? "" : String(value)])) as ClinicalForm;
 }
 
 function Field({ label, id, value, onChange, multiline = false, placeholder, type = "text" }: { label: string; id: string; value: string; onChange: (value: string) => void; multiline?: boolean; placeholder?: string; type?: string }) {
@@ -72,10 +73,15 @@ function PrintBlock({ label, value }: { label: string; value: string }) {
   return <div className="clinical-print-block"><span>{label}</span><p>{displayValue(value)}</p></div>;
 }
 
-export default function ClinicalRecordPanel({ client, patient, record, onSaved }: { client: ClinicClient; patient: Patient; record: ClinicalRecord | null; onSaved: () => Promise<void> }) {
+type ClinicalRecordProps = { client: ClinicClient; patient: Patient; record: ClinicalRecord | null; onSaved: () => Promise<void> };
+export default function ClinicalRecordPanel(props: ClinicalRecordProps) {
+  return <ClinicalRecordEditor key={props.patient.id} {...props} />;
+}
+function ClinicalRecordEditor({ client, patient, record, onSaved }: ClinicalRecordProps) {
   const [form, setForm] = useState<ClinicalForm>(() => formFromRecord(record, patient));
   const [busy, setBusy] = useState(false);
-  useEffect(() => { setForm(formFromRecord(record, patient)); }, [record?.updatedAt, patient.id]);
+  const [editVersion, setEditVersion] = useState<number | null>(() => record?._version ?? null);
+  function reloadSavedRecord() { setForm(formFromRecord(record, patient)); setEditVersion(record?._version ?? null); }
   const bmi = useMemo(() => {
     const weight = numberValue(form.weightKg); const height = numberValue(form.heightCm);
     return weight && height ? weight / ((height / 100) ** 2) : null;
@@ -87,19 +93,20 @@ export default function ClinicalRecordPanel({ client, patient, record, onSaved }
     event.preventDefault(); setBusy(true);
     try {
       const body = {
-        action: "saveClinicalRecord", patientId: patient.id, ...form,
+        action: "saveClinicalRecord", patientId: patient.id, ...form, _version: editVersion,
         weightKg: numberValue(form.weightKg), heightCm: numberValue(form.heightCm), waistCm: numberValue(form.waistCm), hipCm: numberValue(form.hipCm), bodyFatPct: numberValue(form.bodyFatPct),
       };
       const response = await client.request("/api/workspace", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) });
-      const result = await response.json() as { error?: string };
+      const result = await response.json() as { error?: string; version?: number };
       if (!response.ok) throw new Error(result.error ?? "Não foi possível salvar a ficha.");
+      if (result.version !== undefined) setEditVersion(result.version);
       await onSaved(); toast.success("Ficha clínica salva no prontuário.");
     } catch (error) { toast.error(error instanceof Error ? error.message : "Não foi possível salvar a ficha."); }
     finally { setBusy(false); }
   }
 
   return <>
-    <div className="clinical-record-toolbar"><div><span className="eyebrow">PRONTUÁRIO CLÍNICO</span><h2>Ficha de acompanhamento</h2><p>Registre a avaliação e mantenha a ficha atualizada para {patient.name}.</p></div><div className="clinical-record-actions"><button type="button" className="button button-secondary" onClick={() => window.print()}><Printer size={17} /> Imprimir / PDF</button><button type="submit" form="clinical-record-form" className="button button-primary" disabled={busy}><Save size={17} /> {busy ? "Salvando..." : "Salvar ficha"}</button></div></div>
+    <div className="clinical-record-toolbar"><div><span className="eyebrow">PRONTUÁRIO CLÍNICO</span><h2>Ficha de acompanhamento</h2><p>Registre a avaliação e mantenha a ficha atualizada para {patient.name}.</p></div><div className="clinical-record-actions">{record && <button type="button" className="button button-secondary" onClick={reloadSavedRecord} disabled={busy} title="Substitui a edição atual pela ficha salva"><RotateCcw size={17} /> Recarregar ficha salva</button>}<button type="button" className="button button-secondary" onClick={() => window.print()}><Printer size={17} /> Imprimir / PDF</button><button type="submit" form="clinical-record-form" className="button button-primary" disabled={busy}><Save size={17} /> {busy ? "Salvando..." : "Salvar ficha"}</button></div></div>
     <form id="clinical-record-form" className="clinical-record-form" onSubmit={save}>
       <section className="surface clinical-section"><div className="clinical-section-head"><div><span className="eyebrow">ATENDIMENTO</span><h3>Identificação da consulta</h3></div><CalendarDays size={21} /></div><div className="clinical-form-grid three"><Field label="Data da consulta" id="clinical-date" type="date" value={form.consultationDate} onChange={(value) => update("consultationDate", value)} /><Field label="Data do retorno" id="clinical-return" type="date" value={form.returnDate} onChange={(value) => update("returnDate", value)} /><div className="clinical-metric"><span>Última atualização</span><strong>{record ? displayDate(record.updatedAt.slice(0, 10)) : "Ainda não salva"}</strong></div></div></section>
       <section className="surface clinical-section"><div className="clinical-section-head"><div><span className="eyebrow">ANAMNESE</span><h3>Histórico e contexto clínico</h3></div><Stethoscope size={21} /></div><div className="clinical-form-grid two"><Field label="Queixa principal e objetivo" id="clinical-complaint" value={form.mainComplaint} onChange={(value) => update("mainComplaint", value)} multiline placeholder="Motivo da consulta, objetivo e expectativas" /><Field label="Histórico clínico atual" id="clinical-history" value={form.clinicalHistory} onChange={(value) => update("clinicalHistory", value)} multiline placeholder="Condições relatadas, evolução e sintomas" /><Field label="Diagnósticos e condições acompanhadas" id="clinical-diagnoses" value={form.diagnoses} onChange={(value) => update("diagnoses", value)} multiline /><Field label="Medicamentos e suplementos" id="clinical-medications" value={form.medications} onChange={(value) => update("medications", value)} multiline /><Field label="Alergias e intolerâncias" id="clinical-allergies" value={form.allergies} onChange={(value) => update("allergies", value)} multiline /><Field label="Cirurgias e antecedentes relevantes" id="clinical-surgeries" value={form.surgeries} onChange={(value) => update("surgeries", value)} multiline /><Field label="Histórico familiar" id="clinical-family" value={form.familyHistory} onChange={(value) => update("familyHistory", value)} multiline /><Field label="Restrições e preferências alimentares" id="clinical-restrictions" value={form.restrictions} onChange={(value) => update("restrictions", value)} multiline /></div></section>

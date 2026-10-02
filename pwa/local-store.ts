@@ -1,18 +1,23 @@
 import { z } from "zod";
 import { estimateBodyFromPhotos } from "../lib/photo-estimate.ts";
 import { validatePhotoBytes } from "../lib/photo-upload.ts";
+import { prepareBackupFiles, bytesToBase64 } from '../supabase/functions/_shared/backup-files.ts';
 import { appointmentSchema, backupSchema, clinicalRecordInputSchema, idSchema, marksSchema, regionMarksSchema, tapeMeasuresSchema, measurementSchema, patientSchema, photoInputSchema, planSchema, statusSchema, type Backup, type PhotoRecord, type Workspace } from "./schemas.ts";
 
-const stores = ["patients", "appointments", "measurements", "plans", "photoAssessments", "clinicalRecords", "imports"];
+const recordStores = ["patients", "appointments", "measurements", "plans", "photoAssessments", "clinicalRecords", "clinicalEntries"] as const;
+const stores = [...recordStores, "imports"];
 type SavedPhoto = PhotoRecord & { front: Blob; side: Blob };
+type SavedEntry = Workspace['clinicalEntries'][number] & { attachmentBlob?: Blob };
 class LocalError extends Error { status: number; constructor(message: string, status = 400) { super(message); this.status = status; } }
 function read<T>(request: IDBRequest<T>): Promise<T> { return new Promise((resolve, reject) => { request.onsuccess = () => resolve(request.result); request.onerror = () => reject(request.error); }); }
 function metadata({ front: _front, side: _side, ...record }: SavedPhoto): PhotoRecord { return record; }
+function entryMetadata({ attachmentBlob: _blob, ...record }: SavedEntry): Workspace['clinicalEntries'][number] { return record; }
 function sortWorkspace(value: Workspace): Workspace {
   value.patients.sort((a, b) => a.name.localeCompare(b.name, "pt-BR"));
   value.appointments.sort((a, b) => b.startsAt.localeCompare(a.startsAt));
   value.measurements.sort((a, b) => b.measuredOn.localeCompare(a.measuredOn) || b.id - a.id);
   value.photoAssessments.sort((a, b) => b.measuredOn.localeCompare(a.measuredOn) || b.id - a.id);
+  value.clinicalEntries.sort((a, b) => b.recordedOn.localeCompare(a.recordedOn) || b.id - a.id);
   return value;
 }
 async function toBase64(blob: Blob) {
@@ -32,7 +37,7 @@ export function createLocalStore(name = "nutrimara-local-v1", factory: IDBFactor
   function open() {
     if (!factory) return Promise.reject(new LocalError("Este navegador não permite salvar os registros. Abra o aplicativo em uma janela normal do Chrome, Edge ou Safari."));
     if (!connection) connection = new Promise<IDBDatabase>((resolve, reject) => {
-      const request = factory.open(name, 2);
+      const request = factory.open(name, 3);
       request.onupgradeneeded = () => {
         for (const store of stores) if (!request.result.objectStoreNames.contains(store)) request.result.createObjectStore(store, { keyPath: "id", autoIncrement: store !== "imports" });
       };
@@ -53,8 +58,8 @@ export function createLocalStore(name = "nutrimara-local-v1", factory: IDBFactor
     });
   }
   async function snapshot(tx: IDBTransaction) {
-    const [patients, appointments, measurements, plans, photos, clinicalRecords] = await Promise.all(stores.slice(0, 6).map(store => read(tx.objectStore(store).getAll())));
-    return { workspace: sortWorkspace({ patients, appointments, measurements, plans, photoAssessments: (photos as SavedPhoto[]).map(metadata), clinicalRecords }), photos: photos as SavedPhoto[] };
+    const [patients, appointments, measurements, plans, photos, clinicalRecords, entries] = await Promise.all(recordStores.map(store => read(tx.objectStore(store).getAll())));
+    return { workspace: sortWorkspace({ patients, appointments, measurements, plans, photoAssessments: (photos as SavedPhoto[]).map(metadata), clinicalRecords, clinicalEntries: (entries as SavedEntry[]).map(entryMetadata) }), photos: photos as SavedPhoto[], entries: entries as SavedEntry[] };
   }
   async function ownedPatient(tx: IDBTransaction, id: number) {
     if (!await read(tx.objectStore("patients").get(id))) throw new LocalError("Paciente não encontrado.", 404);
@@ -130,6 +135,12 @@ export function createLocalStore(name = "nutrimara-local-v1", factory: IDBFactor
         return Response.json(result, { status: ["createPatient", "createAppointment", "addMeasurement"].includes(body.action) ? 201 : 200 });
       }
       if (url.pathname === "/api/photos" && method === "POST" && init.body instanceof FormData) return Response.json(await savePhotos(init.body), { status: 201 });
+      if (url.pathname === '/api/attachments/url' && method === 'GET') {
+        const id = idSchema.parse(Number(url.searchParams.get('id')));
+        const entry = await transaction('readonly', tx => read(tx.objectStore('clinicalEntries').get(id))) as SavedEntry | undefined;
+        if (!entry?.attachmentBlob) throw new LocalError('Arquivo não encontrado.', 404);
+        return Response.json({url: URL.createObjectURL(entry.attachmentBlob)});
+      }
       if (url.pathname === "/api/photos" && method === "DELETE") {
         const id = idSchema.parse(Number(url.searchParams.get("id")));
         await transaction("readwrite", async tx => {
@@ -159,29 +170,32 @@ export function createLocalStore(name = "nutrimara-local-v1", factory: IDBFactor
     const value = await transaction("readonly", snapshot);
     const photos = [];
     for (const photo of value.photos) photos.push({ id: photo.id, front: await toBase64(photo.front), side: await toBase64(photo.side) });
-    return { format: "nutrimara-backup", version: 2, id: crypto.randomUUID(), exportedAt: new Date().toISOString(), workspace: value.workspace, photos };
+    const attachments = [];
+    for (const entry of value.entries) if (entry.attachment) {
+      if (!entry.attachmentBlob) throw new LocalError('Um anexo não está disponível neste dispositivo.');
+      attachments.push({id: entry.id, data: bytesToBase64(new Uint8Array(await entry.attachmentBlob.arrayBuffer()))});
+    }
+    return { format: "nutrimara-backup", version: 3, id: crypto.randomUUID(), exportedAt: new Date().toISOString(), workspace: value.workspace, photos, attachments };
   }
   async function importBackup(raw: unknown) {
     const parsed = backupSchema.safeParse(raw);
     if (!parsed.success) throw new LocalError("Arquivo de backup inválido ou de uma versão incompatível.");
     const backup = parsed.data;
-    const patientIds = new Set(backup.workspace.patients.map(p => p.id));
-    const photoIds = new Set(backup.workspace.photoAssessments.map(p => p.id));
-    for (const records of Object.values(backup.workspace)) {
-      if (new Set(records.map(r => r.id)).size !== records.length) throw new LocalError("O backup contém registros duplicados.");
-      for (const record of records) if ("patientId" in record && !patientIds.has(record.patientId)) throw new LocalError("O backup contém um vínculo de paciente inválido.");
-    }
-    if (new Set(backup.workspace.plans.map(p => p.patientId)).size !== backup.workspace.plans.length) throw new LocalError("O backup contém planos duplicados.");
-    if (backup.photos.length !== photoIds.size || new Set(backup.photos.map(p => p.id)).size !== photoIds.size || backup.photos.some(p => !photoIds.has(p.id))) throw new LocalError("O backup não contém todas as fotografias.");
+    let files;
+    try { files = prepareBackupFiles(backup); }
+    catch (error) { throw new LocalError(error instanceof Error ? error.message : 'O backup contém um arquivo inválido.'); }
     const blobs = new Map<number, { front: Blob; side: Blob }>();
-    try { for (const p of backup.photos) blobs.set(p.id, { front: fromBase64(p.front), side: fromBase64(p.side) }); }
-    catch { throw new LocalError("O backup contém uma fotografia inválida."); }
+    for (const [id, photo] of files.photos) blobs.set(id, { front: new Blob([new Uint8Array(photo.front)], {type:'image/jpeg'}), side: new Blob([new Uint8Array(photo.side)], {type:'image/jpeg'}) });
     return transaction("readwrite", async tx => {
       if (await read(tx.objectStore("imports").get(backup.id))) throw new LocalError("Esta cópia de segurança já foi importada.");
       const remapped = new Map<number, number>();
       for (const { id, ...patient } of backup.workspace.patients) remapped.set(id, Number(await read(tx.objectStore("patients").add(patient))));
-      for (const key of ["appointments", "measurements", "plans", "photoAssessments", "clinicalRecords"] as const) {
-        for (const { id, patientId, ...record } of backup.workspace[key]) await read(tx.objectStore(key).add({ ...record, patientId: remapped.get(patientId), ...(key === "photoAssessments" ? blobs.get(id) : {}) }));
+      for (const key of ["appointments", "measurements", "plans", "photoAssessments", "clinicalRecords", "clinicalEntries"] as const) {
+        for (const { id, patientId, ...record } of backup.workspace[key]) {
+          const attachment = 'attachment' in record ? record.attachment : undefined;
+          const bytes = files.attachments.get(id);
+          await read(tx.objectStore(key).add({ ...record, patientId: remapped.get(patientId), ...(key === "photoAssessments" ? blobs.get(id) : {}), ...(key === 'clinicalEntries' && attachment && bytes ? {attachmentBlob: new Blob([new Uint8Array(bytes)], {type: attachment.contentType})} : {}) }));
+        }
       }
       await read(tx.objectStore("imports").add({ id: backup.id, importedAt: new Date().toISOString() }));
       return { addedPatients: remapped.size };

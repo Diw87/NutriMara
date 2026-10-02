@@ -1,6 +1,7 @@
 import { z } from "zod";
 import { mutationFor, type CloudRecord } from './cloud-actions.ts';
 import type { Backup } from './schemas';
+import { idSchema } from './schemas.ts';
 export const CLOUD_URL='https://bzsmbceilsondqnbtcfy.supabase.co';
 export const PUBLIC_KEY='sb_publishable_dDq8gSfS91AAT7uPG37eMQ_TulvqEbb';
 const sessionKey='nutrimara-cloud-session';
@@ -22,9 +23,12 @@ export async function call(name:string,body:unknown,anonymous=false){
 }
 export async function signOut(){const old=session();setSession(null);if(old)void fetch(CLOUD_URL+'/auth/v1/logout?scope=local',{method:'POST',headers:{apikey:PUBLIC_KEY,Authorization:'Bearer '+old.access_token}}).catch(()=>{});}
 export function createCloudStore(){let rows:CloudRecord[]=[];let revision='';
+ function rememberEntry(result:Record<string,any>){if(result.entry){const {id,_version,...data}=result.entry;const next={id,kind:'clinicalEntries',data,version:_version??result.version};rows=rows.filter(r=>r.kind!=='clinicalEntries'||r.id!==id);rows.push(next);}}
  async function request(path:string,init:RequestInit={}){try{
   if(path==='/api/workspace'&&(!init.method||init.method==='GET')){const data=await call('nutri-clinic',{action:'load'});rows=data.rows;revision=`${rows.length}:${data.rows.map((r:{updated_at:string})=>r.updated_at).sort().at(-1)||''}`;return Response.json(data.workspace);}
-  if(path==='/api/workspace'){const body=JSON.parse(String(init.body));const m=mutationFor(body,rows);return Response.json(await call('nutri-clinic',{action:'mutate',body,version:m.version}));}
+  if(path==='/api/workspace'){const body=JSON.parse(String(init.body));const m=mutationFor(body,rows);const result=await call('nutri-clinic',{action:'mutate',body,version:body._version===undefined?m.version:body._version===null?null:idSchema.parse(body._version)});rememberEntry(result);return Response.json(result);}
+  if(path==='/api/attachments'&&init.method==='POST'&&init.body instanceof FormData){const form=new FormData();init.body.forEach((value,key)=>form.append(key,value));form.set('action','attachment');const result=await call('nutri-clinic',form);rememberEntry(result);return Response.json(result,{status:201});}
+  if(path.startsWith('/api/attachments/url?')&&(!init.method||init.method==='GET')){const id=idSchema.parse(Number(new URL(path,'https://local.invalid').searchParams.get('id')));return Response.json(await call('nutri-clinic',{action:'attachmentUrl',id}));}
   if(path==='/api/photos'&&init.body instanceof FormData)return Response.json(await call('nutri-clinic',init.body));
   if(path.startsWith('/api/photos?')&&init.method==='DELETE'){const id=Number(new URL(path,'https://local.invalid').searchParams.get('id'));const r=rows.find(r=>r.id===id&&r.kind==='photoAssessments');return Response.json(await call('nutri-clinic',{action:'deletePhoto',id,version:r?.version}));}
   throw Error('Operação indisponível.');
